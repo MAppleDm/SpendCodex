@@ -475,7 +475,7 @@ class Ledger @Inject constructor(
                 dao.upsertAccount(Account(UUID.randomUUID().toString(), Starter.name(a.ru, a.en, language), a.kind, code, null, nowMs, nowMs, sort = i).toEntity())
             }
             if (dao.categoriesNow().isEmpty()) {
-                Starter.categories.forEachIndexed { i, c ->
+                Starter.categories.filter { it.kind == CategoryKind.Expense }.forEachIndexed { i, c ->
                     dao.upsertCategory(Category(UUID.randomUUID().toString(), Starter.name(c.ru, c.en, language), c.kind, null, c.keywords, nowMs, nowMs, sort = i).toEntity())
                 }
             }

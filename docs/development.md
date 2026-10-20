@@ -36,10 +36,11 @@ JVM only (Robolectric with real SQLite), no emulator needed. What they cover:
 | `BackupTest` | export → restore → export is identical; bare JSON; archive layout and checksums; exact amount strings; CSV quoting and formula guard; the AI package; damaged, foreign, newer, partial and inconsistent files refused with nothing changed; 50 000 operations |
 | `ReceiptTest` | real JPEG compression and all EXIF orientations; originals; atomic save/delete/undo; duplicates and limits; exact photo round-trips and safety copies; missing/damaged/oversized/unsafe archives; staging-loss rollback; v1 JSON/ZIP compatibility |
 | `ReceiptFlowTest` | gallery and camera output, duplicate selection, viewer, removal/undo, pending changes and abandonment; optional screenshots via `-Pscreenshots=../docs/screenshots` |
-| `AiReaderTest` | the DeepSeek request (forced function, what is sent and what is not), parsing, invented amounts flagged, errors told apart, the key never echoed |
+| `AiReaderTest` | the forced DeepSeek tool, expense-only schema, generated tags and vocabulary, exact amounts, malformed batches, truncation, invalid fields, errors and redacted keys |
+| `PaletteTest` | every palette (black & white, avocado; light and dark) keeps text at WCAG 4.5:1; the black & white look is unchanged; the choice persists and survives erasing |
 | `MigrationTest` | a database built from the exported v1 schema opens with today's app |
-| `JournalFlowTest` | the journal screen end to end: type, see the words, tap one to change it, record, undo; no amount; several operations |
-| `AiFlowTest` | DeepSeek off: nothing leaves; on: the unread line goes there, the answer waits for "record" and flags an amount not in the text |
+| `JournalFlowTest` | secondary manual entry, expense-only feed/totals, legacy data preserved and editable, old income searchable explicitly |
+| `AiFlowTest` | primary DeepSeek input, automatic save and tags, batch atomicity, currencies, undo, no-key state, income rejection, network retry, cancellation and duplicate taps |
 
 ## Layout
 
@@ -48,12 +49,12 @@ android/
   core-ui/   design system: colours, Inter, thin-stroke icons, rows, tokens, the input bar
   data/      everything that is not a screen
     domain/    Money, Currency, Transaction & co, Rules (validation), Draft + DraftBuilder, Balances
-    parse/     QuickLine: the deterministic line parser, and its vocabulary
+    parse/     legacy QuickLine grammar; only number tokenisation is used to verify AI amounts
     db/        Room entities, DAO, the filtered query builder, mappers; schemas/ per version (v1 → v2 migration)
     receipts/  bounded JPEG compression, EXIF orientation, metadata and pending photo drafts
     repo/      Ledger (the one place records are written), the starter categories
     backup/    the data format, Codec (write + strict read), CSV, ZIP + manifest, Backups (export/restore)
-    ai/        AiReader: DeepSeek, optional
+    ai/        AiReader: primary DeepSeek expense extraction and tagging
     settings/  choices (prefs) and the encrypted DeepSeek key
   app/       Activity, navigation, view models and screens; lock and GitHub updates
 docs/
@@ -63,3 +64,19 @@ docs/
 ## Engineering decisions
 
 See [decisions.md](decisions.md).
+
+## DeepSeek input contract (0.3)
+
+Every explicit send uses `deepseek-flash` at `/chat/completions`, with thinking disabled and the forced
+`record_operations` tool. The model name and endpoint match the [official API guide](https://api-docs.deepseek.com/).
+The key is provided by the user; tests use MockWebServer, never a paid account. The original typed note is retained in
+`input_text`, with `origin=ai`. Categories and generated tags are classifications, not additional financial facts.
+
+No automatic fallback to QuickLine exists. No key/network: keep the note and offer retry, key setup or the manual form.
+Ordinary validated expense batches save atomically; unknown references require review; invalid money/date/currency blocks
+saving. Amounts absent from the text cannot be accepted through the AI confirmation action. Editing/cancelling input cancels
+the HTTP call; stable batch IDs and a synchronous busy guard prevent duplicate saves. Manual entry and stored history work offline.
+
+Room schema and JSON format remain version 2. The old `ai_enabled` preference is round-tripped for compatibility but no longer
+gates primary input. Non-expense records and account opening amounts remain intact; only expenses/refunds appear in the main
+feed. Legacy CSV balance columns remain present and empty; no balance calculation runs in screens or export.

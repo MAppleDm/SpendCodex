@@ -87,9 +87,6 @@ fun OperationRow(row: FeedRow, showAccount: Boolean, onClick: () -> Unit, modifi
     // how the account itself moved, when the operation was in another currency
     val amountCaption = when {
         type == TxType.Transfer && row.toAmountMinor != null && row.toAccountCurrency != null -> "→ " + Format.money(row.toAmountMinor!!, row.toAccountCurrency!!)
-        type != TxType.Transfer && row.currency != row.accountCurrency -> row.accountAmountMinor?.let {
-            Format.money(if (type == TxType.Expense) -it else it, row.accountCurrency, withSign = type != TxType.Expense)
-        } ?: "? ${Format.sign(row.accountCurrency)}"
         else -> null
     }
     LedgerRow(

@@ -3,6 +3,7 @@ package dev.spendcodex.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.spendcodex.coreui.Palette
 import dev.spendcodex.Texts
 import dev.spendcodex.data.backup.DocAssets
 import dev.spendcodex.data.domain.Account
@@ -58,6 +59,11 @@ class SettingsViewModel @Inject constructor(
 
     fun onLanguage() = settings.setLanguage(if (settings.choices.value.language == Language.Ru) Language.En else Language.Ru)
 
+    /** The look of the app on this phone. */
+    val theme: StateFlow<String> = settings.theme
+
+    fun onTheme() = settings.setTheme(if (Palette.of(settings.theme.value) == Palette.Avocado) Palette.Mono.code else Palette.Avocado.code)
+
     fun onToggleCurrency() = ui.update { it.copy(currencyOpen = !it.currencyOpen, accountOpen = false) }
     fun onCurrency(code: String) {
         settings.setDefaultCurrency(code)
@@ -81,6 +87,7 @@ class SettingsViewModel @Inject constructor(
             return
         }
         val ok = runCatching { secrets.saveKey(key) }.isSuccess
+        if (ok) settings.setAiEnabled(true)
         ui.update { it.copy(keyDraft = "", keyMessage = if (ok) Texts.AI_KEY_SET else Texts.AI_KEY_STORE_FAILED, keyError = !ok) }
     }
 
@@ -88,15 +95,6 @@ class SettingsViewModel @Inject constructor(
         secrets.clear()
         settings.setAiEnabled(false)
         ui.update { it.copy(keyMessage = null) }
-    }
-
-    fun onToggleAi() {
-        val on = settings.choices.value.aiEnabled
-        if (!on && !secrets.hasKey.value) {
-            ui.update { it.copy(keyMessage = Texts.AI_NEEDS_KEY, keyError = true) }
-            return
-        }
-        settings.setAiEnabled(!on)
     }
 
     // ---------- erase ----------

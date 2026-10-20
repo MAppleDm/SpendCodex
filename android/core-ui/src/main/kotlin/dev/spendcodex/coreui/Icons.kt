@@ -68,16 +68,18 @@ fun SearchIcon(color: Color, modifier: Modifier = Modifier) = Canvas(modifier.si
     line(color, 0.62f, 0.62f, 0.82f, 0.82f)
 }
 
-/** Three lines of a form with a dot on each: the full form for a new operation. */
+/** A page with a plus: adding a record manually. */
 @Composable
 fun FormIcon(color: Color, modifier: Modifier = Modifier) = Canvas(modifier.size(24.dp)) {
     val w = size.width
-    val rows = floatArrayOf(0.28f, 0.5f, 0.72f)
-    val knobs = floatArrayOf(0.62f, 0.36f, 0.56f)
-    rows.forEachIndexed { i, y ->
-        line(color, 0.18f, y, 0.82f, y)
-        drawCircle(color, radius = w * 0.06f, center = Offset(w * knobs[i], w * y))
+    val page = Path().apply {
+        moveTo(w * 0.6f, w * 0.83f); lineTo(w * 0.22f, w * 0.83f)
+        lineTo(w * 0.22f, w * 0.17f); lineTo(w * 0.64f, w * 0.17f)
+        lineTo(w * 0.78f, w * 0.31f); lineTo(w * 0.78f, w * 0.47f)
     }
+    drawPath(page, color, style = stroke())
+    line(color, 0.58f, 0.67f, 0.88f, 0.67f)
+    line(color, 0.73f, 0.52f, 0.73f, 0.82f)
 }
 
 @Composable

@@ -1,9 +1,5 @@
 package dev.spendcodex.data.backup
 
-import dev.spendcodex.data.domain.Balance
-import dev.spendcodex.data.domain.Currencies
-import dev.spendcodex.data.domain.Decimal
-
 /**
  * CSV the way RFC 4180 says: comma separated, CRLF line ends, a field in double quotes when it holds a comma, a quote, a line
  * break or spaces at its ends, quotes inside doubled. UTF-8 without a byte order mark. Numbers with a dot.
@@ -88,15 +84,13 @@ object Csv {
         return table
     }
 
-    /** Accounts, with the balance as the app computes it at export time (derived: not read back by a restore). */
-    fun accounts(file: ExportFile, balances: Map<String, Balance>): Table {
+    /** Payment methods. Legacy balance columns stay empty for compatibility with existing CSV readers. */
+    fun accounts(file: ExportFile): Table {
         val table = Table(listOf("id", "name", "kind", "currency", "opening_balance", "computed_balance", "computed_balance_complete", "archived", "sort", "created_at", "updated_at"))
         for (a in file.accounts) {
-            val b = balances[a.id]
-            val exponent = Currencies.of(a.currency)?.exponent ?: 2
             table.row(
                 v(a.id), t(a.name), v(a.kind), v(a.currency), v(a.openingBalance),
-                v(b?.let { Decimal.format(it.minor, exponent) }), v(b?.complete),
+                v(null), v(null),
                 v(a.archived), v(a.sort), v(a.createdAt), v(a.updatedAt),
             )
         }

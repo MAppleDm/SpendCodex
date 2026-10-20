@@ -8,6 +8,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -16,6 +18,7 @@ import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
 import dev.spendcodex.coreui.AppTheme
 import dev.spendcodex.coreui.CoreTexts
+import dev.spendcodex.coreui.Palette
 import dev.spendcodex.data.settings.Language
 import dev.spendcodex.data.settings.Settings
 import dev.spendcodex.ui.AppRoot
@@ -58,15 +61,19 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val screens = Screens(nav, journal, operation, search, accounts, categories, data, settingsModel, lockModel, updates)
-        // Follows the system light/dark setting; there is no dynamic (wallpaper) colour. A new language rebuilds the
-        // screens (the view models and their state stay).
+        // Follows the system light/dark setting in the chosen palette; there is no dynamic (wallpaper) colour. A new
+        // language rebuilds the screens (the view models and their state stay).
         setContent {
             val choices by settings.choices.collectAsState()
+            val theme by settings.theme.collectAsState()
             CoreTexts.english = choices.language == Language.En
             val locked by lock.locked.collectAsState()
             LaunchedEffect(locked) { if (locked) askToUnlock() }
             key(choices.language) {
-                AppTheme {
+                AppTheme(palette = Palette.of(theme)) {
+                    // the window behind the pages takes the palette too, so nothing of the other one shows at the edges
+                    val background = AppTheme.colors.background.toArgb()
+                    SideEffect { window.decorView.setBackgroundColor(background) }
                     if (locked) LockScreen(onOpen = ::askToUnlock) else AppRoot(screens)
                 }
             }

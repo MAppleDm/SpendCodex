@@ -9,6 +9,7 @@ import dev.spendcodex.data.domain.Filter
 import dev.spendcodex.data.domain.TxType
 import dev.spendcodex.data.repo.Ledger
 import dev.spendcodex.ui.journal.Names
+import dev.spendcodex.ui.journal.JournalViewModel
 import java.time.Clock
 import java.time.LocalDate
 import javax.inject.Inject
@@ -52,12 +53,19 @@ class SearchViewModel @Inject constructor(private val ledger: Ledger, private va
 
     // typing waits a moment before the query runs; every other change runs at once
     private val filter = ui.map { it.filter }.distinctUntilChanged().debounce { if (it.text.isNotEmpty()) 150L else 0L }
-    private val rows = combine(filter, limit) { f, l -> f to l }.flatMapLatest { (f, l) -> ledger.feed(f, l) }
-    private val totals = filter.flatMapLatest { ledger.totals(it) }
+    // Default search follows the expense journal. Explicit legacy type filters can still recover older records.
+    private fun expenseFilter(f: Filter) = if (f.types.isEmpty()) f.copy(types = JournalViewModel.EXPENSE_TYPES) else f
+    private data class Matches(val filter: Filter, val rows: List<FeedRow>, val totals: List<TypeTotal>)
+    private val matches = combine(filter, limit) { f, l -> f to l }.flatMapLatest { (f, l) ->
+        combine(ledger.feed(expenseFilter(f), l), ledger.totals(expenseFilter(f))) { r, t -> Matches(f, r, t) }
+    }
+    fun exportFilter(): Filter = expenseFilter(ui.value.filter)
     private val names = combine(ledger.accounts, ledger.categories, ledger.tags) { a, c, t -> Names(a, c, t) }
 
-    val state: StateFlow<SearchUiState> = combine(ui, rows, totals, names) { u, r, t, n ->
-        u.copy(rows = r, loaded = true, hasMore = r.size >= limit.value, totals = t, names = n, today = LocalDate.now(clock))
+    val state: StateFlow<SearchUiState> = combine(ui, matches, names) { u, m, n ->
+        val ready = m.filter == u.filter
+        u.copy(rows = if (ready) m.rows else emptyList(), loaded = ready, hasMore = ready && m.rows.size >= limit.value,
+            totals = if (ready) m.totals else emptyList(), names = n, today = LocalDate.now(clock))
     }.stateIn(viewModelScope, SharingStarted.Eagerly, SearchUiState())
 
     /** Opens the page with [start] (empty, or an account from the journal's balances); a rotation keeps what was set. */

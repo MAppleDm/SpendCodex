@@ -1,86 +1,82 @@
 # Decisions
 
-Short and concrete: what was chosen and why. The brief is in [brief.ru.md](brief.ru.md); where the person's answers to the
-clarifying questions differ from it, the answers win (they are noted below).
+The person's clarifications override the [original AI-generated brief](brief.ru.md). The current product direction is
+AI-first expense capture (0.3), with readable receipt photos, manual export/restore and secondary manual entry.
 
-## Product
+## Product and the FatCodex reference
 
-- **Android, same stack as FatCodex** (Kotlin, Compose, Room, Hilt; modules `app`, `core-ui`, `data`). Chosen by the person
-  over a web/PWA client. The brief's mentions of hotkeys are covered for hardware keyboards; there is no command palette.
-- **One screen to write, like FatCodex.** The journal is the main page; the line at the bottom is the input. What FatCodex
-  does with a model (read a sentence into records), SpendCodex does with a **deterministic local parser**, and shows its
-  reading word by word *before* recording: the "preview for confirmation" of the brief is always on, not only for doubtful
-  lines. A full form exists for everything the line cannot say.
-- **DeepSeek is optional** (the person's choice, against the brief's "no AI inside"). It is off by default, needs the person's
-  own key, and is only used for a line the parser could not read. It sends that line, today's date and the names of accounts and
-  categories, never amounts or history. It fills in fields, nothing else: there is no chat, no advice, no analysis. Every amount
-  it returns is checked against the numbers actually written in the line.
-- **Carried over from FatCodex:** RU/EN switch, biometric lock (same logic), GitHub updates (same verification of size,
-  SHA-256 and signing key), "erase everything" with two taps, the export-for-analysis idea, the visual language.
-  Not carried over: voice, camera, server mode, the food database.
-- **Navigation:** the journal; ⋮ → settings (Data first, then Accounts, Categories and tags, choices); a magnifier → search.
-  The brief's five sections are there, arranged the FatCodex way (one main page, everything else one tap behind it).
+- Android: Kotlin, Compose, Room, Hilt; `app`, `core-ui`, `data` modules, matching FatCodex's engineering approach.
+- One journal, a bottom text input, monochrome Inter typography, thin rules and orange timestamps. FatCodex was read
+  as a reference and is not modified. RU/EN, biometric lock, GitHub update verification and export-for-analysis are retained.
+- Every explicit send goes to DeepSeek using the user's key. There is no local-parser fallback, chat or financial advice.
+  DeepSeek extracts expenses, picks an existing expense category and adds useful tags, reusing existing tag names.
+- Validated ordinary batches save immediately with undo. Unknown references require review. Invalid amounts, currencies,
+  dates, tags or an amount absent from the note block the AI save action. Income/transfer/balance intent is refused.
+- Manual entry is the page-with-plus action beside search. It also handles corrections and receipt attachment.
+- The main feed and default search contain expenses and purchase refunds. No new income/transfer/adjustment picker,
+  income category creation, opening balance entry or reconciliation UI exists. Payment methods are labels without balances.
+- Previously stored non-expense types remain editable and searchable through explicit legacy type filters. JSON data,
+  links, opening amounts and old settings are preserved; updating never deletes or reinterprets existing records.
 
-## Money
+## DeepSeek boundary
 
-- Amounts are `Long` minor units with the currency's exponent from a fixed ISO 4217 table (`Currencies`); the table goes into
-  every export. No floating point anywhere. Parsing refuses more decimals than the currency has instead of rounding.
-  Maximum amount 10^15 minor units: sums cannot overflow, and the values are exact even as JSON doubles.
-- Each record keeps what was written (`amount` + `currency`) and, when that currency is not the account's, what the account
-  moved (`account_amount`). A transfer leaves in its account's currency and arrives as `to_amount` when the currencies differ
-  (then required). There are no exchange rates in the app: an amount that cannot be counted makes the balance visibly
-  incomplete.
-- Types: expense, income, transfer, refund (linked to an expense when known), adjustment (signed). The balance formula is one
-  pure function (`Balances`) and is written down in the format description.
+- A forced `record_operations` function returns one complete batch (up to 50 expenses), or an explicit clarification status.
+  An invalid item refuses the whole batch; malformed/duplicate/truncated answers are refused rather than partially saved.
+- The request contains the submitted note, date, time zone, language, default currency, payment-method names/currencies,
+  expense-category paths/keywords and existing tag names. No history, opening balances or photos are included.
+- The key is AES-GCM encrypted with Android Keystore, used for API authentication, excluded from exports and Android backup.
+  A saved key is enough to use primary input; the old `ai_enabled` setting survives only for export/restore compatibility.
+- Typing alone never calls the API. A synchronous busy guard prevents concurrent sends. Editing or cancelling cancels the
+  HTTP request. Stable IDs derived from a batch UUID keep retries and repeated confirmations idempotent. Saving freezes
+  input briefly so the text cannot be cleared underneath a newer note. Failures retain the note and expose retry/manual entry.
+- `origin=ai` and `input_text` preserve provenance. Export instructions identify categories and tags as classifications,
+  so downstream models do not treat generated labels as independently confirmed financial facts.
+- Processing input needs a network connection. Stored history, manual entry, photo handling and export/restore remain usable
+  offline. No backend, cloud journal or device sync was introduced: the requested AI-first change concerns input.
 
-## Time
+## Money and time
 
-- `date` is the person's day, `time` the minute or **null when unknown** (written for "yesterday" → no time), `time_zone` the
-  phone's zone when recorded. `created_at`/`updated_at` are the record's own times, UTC ms.
-- Order: date, time (unknown last in its day), `created_at`, `id`: stable for records at the same minute.
-- A day and month without a year is the latest such day not in the future, and the line says so when that is last year.
+- `Long` minor units, ISO 4217 exponents, exact decimal-string parsing. Excess precision is refused instead of rounded;
+  currencies are kept separate. The maximum per-operation amount is 10^15 minor units.
+- The schema retains older account amounts and transfer fields for lossless compatibility. Balance computation is not used
+  by screens or exports. Legacy CSV balance columns remain present and empty to avoid changing existing column layouts.
+- `date` is the person's local day; `time` is a minute or null when unknown. A past day without time stays unknown.
+  `created_at` and `updated_at` are UTC milliseconds. Order is date, time, creation time, ID.
 
-## Storage
+## Storage and search
 
-- Room with foreign keys on (NO ACTION; SET NULL for a refund's link): an account, category or tag in use cannot be deleted,
-  only archived; archived ones stay valid on old records.
-- Records are inserted with IGNORE on their id: a draft keeps its id until recorded, so a second tap stores nothing new.
-  Updates are upserts, never REPLACE (which would delete the row and cascade). An edit that changes nothing is not written.
-- Search: normalised text (lowercase, ё→е) kept beside names and texts, LIKE with escaped wildcards, every word must match
-  somewhere (text, amount, account, category, tag); all filters are bound arguments. The journal loads 200 records at a time.
-  Measured on the JVM with 50 000 records: first page 122 ms, a search 59 ms, balances 80 ms.
-- Settings are SharedPreferences (`app`); the DeepSeek key is AES-GCM with a Keystore key in `secrets`, excluded from
-  Android's backup and from every export.
+- Room foreign keys protect referenced accounts/categories/tags; archiving preserves old records. Inserts use IGNORE on
+  stable IDs; edits use upserts without REPLACE/cascade deletion. Unchanged edits preserve their timestamps.
+- Expense batches save atomically. The schema remains version 2, so existing installs need no destructive migration.
+- Search uses normalised text, escaped LIKE patterns and bound filters; all words must match. Pages load 200 records.
+  Pending filter changes do not expose stale results or exports from a different selection.
 
-## Export and restore
+## Receipt photos and manual copies
 
-- Format version 2 (`docs/export/format.md`, `schema.json`; v1 remains readable): one JSON with every entity, ids and links; amounts as strings;
-  sorted lists, so two exports of the same data are identical but for `exported_at`.
-- The full backup is a ZIP with the JSON, CSV tables, the description and the schema, and a manifest with SHA-256 per file.
-  CSV is RFC 4180, UTF-8 without BOM (as in FatCodex), with a formula guard on person-written text only.
-- Restore = full replacement, the only mode the brief requires and the only one whose correctness can be guaranteed. The file
-  is read and checked completely first (format, version, every field, every reference, every rule of the journal); a partial
-  export is refused; the current journal is written to a safety copy; then everything is replaced in one transaction.
-- Schema migrations: Room schemas are exported per version (`data/schemas`), `Migrations.ALL` holds the steps, and
-  `MigrationTest` opens a database built from an old schema. The file format has its own `format_version`: an older app refuses
-  a newer file instead of guessing.
+- System photo picker plus external camera via a narrow FileProvider cache directory. No broad gallery/camera permission.
+  Original images remain intact. Compression removes EXIF and respects all eight orientations.
+- Up to 10 bounded JPEGs per record: short edge 1600 px, long edge 8192 px, 6M pixels, 1.5 MB each. Metadata queries exclude
+  image blobs. SHA-256 prevents duplicate photos on one record; repeats/refunds do not copy an old receipt implicitly.
+- Pending photos apply together with form Save; removal has undo. The viewer supports pinch, pan and double tap.
+- Room stores bounded image blobs, so financial/photo edits, deletion/undo and restore remain atomic after interruption.
+- Full manual ZIPs contain exact JPEG bytes, metadata, JSON, CSV, format/schema and per-file checksums. Analysis exports
+  contain photo metadata without images. Version 1 copies remain readable; current Room and export format are version 2.
+- Restore stages bounded streams under generated private names, validates every field/reference/photo/checksum, rejects
+  partial exports, saves a safety copy, then replaces everything in one transaction. Cancellation discards staged files;
+  database failure rolls back. Export → restore → export retains financial and photo data.
 
-## What is deliberately not there
+## Looks
 
-Charts, dashboards, budgets, forecasts, advice, sync, user accounts, bank integrations and exchange rates.
+- Two palettes, both following the phone's light/dark mode: **black & white** (the FatCodex look, the default) and
+  **avocado** (pale flesh by day, dark skin at night, the stone's brown for times, its green for actions and chosen items).
+- Every colour is a token in `core-ui/Theme.kt`; `accent`/`onAccent` colour the send button, chosen chips, text actions and
+  question bars. In black & white the accent equals the text colour, so that look is unchanged.
+- The choice is a property of the phone (`theme` in the `app` preferences), like the lock: not part of the journal, not in
+  exports, kept by "erase everything". `PaletteTest` keeps every text colour at WCAG 4.5:1 on its background in all four
+  variants.
 
-## Receipt photos
+## Deliberate limits
 
-- The person's clarification: both camera and gallery, local compression for readable text, existing manual export/restore
-  retained. No scheduled copying, OCR, recognition or image calls to a model were added.
-- System photo picker and external camera capture via a narrowly scoped FileProvider cache directory. No broad gallery or
-  camera permission; the selected photo is immediately compressed into the pending form. Original gallery files stay intact.
-- Room schema 2 adds `receipts`: bounded JPEG blobs (under Android's CursorWindow size) with metadata queried separately.
-  This keeps financial changes, photo changes, delete/undo and restoration in one database transaction. It avoids a second
-  file store that could disagree with the journal after a crash. Collection queries never read blobs; exports fetch one at a time.
-- Up to 10 per operation, SHA-256 duplicate detection per operation. Repeats/refunds do not implicitly reuse an old photo.
-  Draft additions/removals take effect only on save; removal has undo. Viewing supports pinch, pan and double tap.
-- Full manual ZIP copies contain exact saved JPEG bytes, metadata/CSV and checksums. Analysis outputs have metadata only;
-  a file missing photo bytes cannot pretend to be a restorable full copy. v1 copies remain readable. The existing safety copy
-  covers photos too. Restores stage bounded streams under generated temporary names, validate all references and bytes,
-  and replace journal plus images atomically. Cancellation discards staged files; failed database writes roll back.
+No account balances, new income bookkeeping, bank integration, exchange-rate service, charts, budgets, forecasts, chat,
+financial advice or device sync. Real API behaviour is checked through the documented protocol and stand-in server tests;
+no live user key is used by automated verification.

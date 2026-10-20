@@ -187,7 +187,6 @@ class Backups @Inject constructor(
     suspend fun write(kind: ExportKind, scope: ExportScope, out: OutputStream) = db.withTransaction {
         val effective = if (kind == ExportKind.Backup) ExportScope(includeReceipts = true) else scope.copy(includeReceipts = false)
         val file = file(effective)
-        val balances = ledger.balancesNow()
         withContext(Dispatchers.IO) {
             val app = file.app
             val counts = Counts(file.accounts.size, file.categories.size, file.tags.size, file.transactions.size, file.receipts.size)
@@ -202,7 +201,7 @@ class Backups @Inject constructor(
                     listOf(
                         Archive.Entry(Archive.DATA, dataBytes()),
                         Archive.Entry("csv/transactions.csv", csv(Csv.transactions(file))),
-                        Archive.Entry("csv/accounts.csv", csv(Csv.accounts(file, balances))),
+                        Archive.Entry("csv/accounts.csv", csv(Csv.accounts(file))),
                         Archive.Entry("csv/categories.csv", csv(Csv.categories(file))),
                         Archive.Entry("csv/tags.csv", csv(Csv.tags(file))),
                         Archive.Entry("csv/transaction_tags.csv", csv(Csv.transactionTags(file))),
@@ -217,7 +216,7 @@ class Backups @Inject constructor(
                     out, "spendcodex-csv-$date", "csv", file.exportedAt, app, counts,
                     listOf(
                         Archive.Entry("transactions.csv", csv(Csv.transactions(file))),
-                        Archive.Entry("accounts.csv", csv(Csv.accounts(file, balances))),
+                        Archive.Entry("accounts.csv", csv(Csv.accounts(file))),
                         Archive.Entry("categories.csv", csv(Csv.categories(file))),
                         Archive.Entry("tags.csv", csv(Csv.tags(file))),
                         Archive.Entry("transaction_tags.csv", csv(Csv.transactionTags(file))),
@@ -233,7 +232,7 @@ class Backups @Inject constructor(
                             Archive.Entry("README_FOR_AI.md", aiReadme(file, effective, english).toByteArray(Charsets.UTF_8)),
                             Archive.Entry("PROMPT.txt", docs.prompt(english).toByteArray(Charsets.UTF_8)),
                             Archive.Entry("transactions.csv", csv(Csv.transactions(file))),
-                            Archive.Entry("accounts.csv", csv(Csv.accounts(file, balances))),
+                            Archive.Entry("accounts.csv", csv(Csv.accounts(file))),
                             Archive.Entry("categories.csv", csv(Csv.categories(file))),
                             Archive.Entry("tags.csv", csv(Csv.tags(file))),
                             Archive.Entry("receipts.csv", csv(Csv.receipts(file))),

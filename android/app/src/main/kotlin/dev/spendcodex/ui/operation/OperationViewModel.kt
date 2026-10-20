@@ -145,20 +145,6 @@ class OperationViewModel @Inject constructor(
 
     fun update(change: (Draft) -> Draft) = form.update { it.copy(draft = change(it.draft), problems = emptyList()) }
 
-    fun onType(type: TxType) = update { d ->
-        val n = currentNames()
-        val keepCategory = type.categoryKind != null && n?.category(d.categoryId)?.kind == type.categoryKind
-        d.copy(
-            type = type,
-            categoryId = if (keepCategory) d.categoryId else null,
-            toAccountId = if (type == TxType.Transfer) d.toAccountId else null,
-            toAmount = if (type == TxType.Transfer) d.toAmount else "",
-            refundOf = if (type == TxType.Refund) d.refundOf else null,
-        )
-    }
-
-    private fun currentNames(): Names? = state.value.names
-
     fun onOpen(field: FormField?) = form.update { it.copy(open = if (it.open == field) null else field) }
 
     fun onTags(text: String) = form.update {
@@ -234,6 +220,7 @@ class OperationViewModel @Inject constructor(
     fun onRepeat() {
         if (form.value.busy || form.value.photoBusy) return
         val tx = form.value.existing ?: return
+        if (tx.type != TxType.Expense) return
         viewModelScope.launch {
             val r = ledger.repeat(tx.id) as? SaveResult.Saved
             if (r == null) {

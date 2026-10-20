@@ -66,7 +66,7 @@ fun OperationScreen(state: OperationUiState, vm: OperationViewModel, onBack: () 
     }
 
     Column(modifier.fillMaxSize().background(c.background).statusBarsPadding().imePadding()) {
-        PageHeader(if (f.existing == null) Texts.NEW_OPERATION else Texts.OPERATION, onBack) {
+        PageHeader(if (f.existing != null) Texts.OPERATION else if (d.type == TxType.Refund) Texts.typeTitle(TxType.Refund) else Texts.NEW_OPERATION, onBack) {
             TextAction(
                 if (f.busy) "…" else if (f.existing == null) Texts.RECORD else Texts.SAVE, vm::onSave,
                 Modifier.testTag("form-save"), enabled = !f.loading && !f.busy && !f.photoBusy,
@@ -74,13 +74,8 @@ fun OperationScreen(state: OperationUiState, vm: OperationViewModel, onBack: () 
         }
         if (f.loading) return@Column
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).navigationBarsPadding()) {
-            // the type
-            FlowRow(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                TxType.entries.forEach { type ->
-                    Token(Texts.type(type), { vm.onType(type) }, active = d.type == type, modifier = Modifier.testTag("type-${type.code}"))
-                }
-            }
+            // New entries are expenses. Existing records keep their original type for lossless editing.
+            if (d.type != TxType.Expense) StatRow(Texts.TYPES, Texts.typeTitle(d.type), enabled = false)
 
             // the amount and its currency
             val account = names.account(d.accountId ?: state.defaultAccountId)
@@ -113,7 +108,7 @@ fun OperationScreen(state: OperationUiState, vm: OperationViewModel, onBack: () 
             StatRow(Texts.ACCOUNT, account?.name ?: "?", Modifier.testTag("form-account"), onClick = { vm.onOpen(FormField.Account) })
             if (f.open == FormField.Account) AccountChoices(names, d.accountId ?: state.defaultAccountId) { id -> vm.update { it.copy(accountId = id) }; vm.onOpen(null) }
             Errors(problemsOf(Problem.Field.Account))
-            if (d.type != TxType.Transfer && d.type != TxType.Adjustment && account != null && currency.isNotEmpty() && currency != account.currency) {
+            if (f.existing != null && d.accountAmount.isNotBlank() && account != null && currency != account.currency) {
                 Column(Modifier.padding(horizontal = 16.dp)) {
                     UnderlineField(
                         d.accountAmount, { v -> vm.update { it.copy(accountAmount = v) } }, Modifier.testTag("form-account-amount"),
@@ -121,7 +116,6 @@ fun OperationScreen(state: OperationUiState, vm: OperationViewModel, onBack: () 
                         keyboardType = KeyboardType.Decimal, mono = true, error = problemsOf(Problem.Field.AccountAmount).isNotEmpty(),
                     )
                 }
-                Hint(Texts.ACCOUNT_AMOUNT_HINT)
                 Errors(problemsOf(Problem.Field.AccountAmount))
             }
             if (d.type == TxType.Transfer) {
@@ -215,7 +209,7 @@ fun OperationScreen(state: OperationUiState, vm: OperationViewModel, onBack: () 
             f.existing?.let { tx ->
                 Hairline(Modifier.padding(top = 12.dp))
                 Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-                    TextAction(Texts.REPEAT, vm::onRepeat, Modifier.testTag("form-repeat"))
+                    if (tx.type == TxType.Expense) TextAction(Texts.REPEAT, vm::onRepeat, Modifier.testTag("form-repeat"))
                     if (tx.type == TxType.Expense) TextAction(Texts.MAKE_REFUND, vm::onMakeRefund, Modifier.testTag("form-refund"))
                     Spacer(Modifier.weight(1f))
                     TextAction(Texts.DELETE, vm::onDelete, Modifier.testTag("form-delete"), color = c.error)

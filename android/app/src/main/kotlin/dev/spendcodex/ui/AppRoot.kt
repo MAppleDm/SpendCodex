@@ -111,10 +111,9 @@ private fun Pages(s: Screens) {
     }
 
     // back closes the innermost thing first: a list of choices, DeepSeek's answer, then the page
-    BackHandler(enabled = stack.size > 1 || journal.composer.picker != null || journal.composer.ai !is AiUi.Idle) {
+    BackHandler(enabled = stack.size > 1 || journal.composer.ai !is AiUi.Idle) {
         when {
             stack.size > 1 -> s.nav.back()
-            journal.composer.picker != null -> s.journal.onPick(null)
             else -> s.journal.onAiClose()
         }
     }
@@ -140,7 +139,7 @@ private fun Pages(s: Screens) {
                 onForm = ::newOperation,
                 onSearch = { s.nav.push(Screen.Search()) },
                 onSettings = { s.nav.push(Screen.Settings) },
-                onAccount = { id -> s.nav.push(Screen.Search(Filter(accountIds = setOf(id)))) },
+                onAi = { s.nav.push(Screen.Ai) },
             )
             is Screen.Operation -> {
                 LaunchedEffect(top.key) { s.operation.open(top.key, top.request, top.fromLine) }

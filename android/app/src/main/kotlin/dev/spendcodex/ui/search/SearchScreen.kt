@@ -41,6 +41,7 @@ import dev.spendcodex.coreui.DateRow
 import dev.spendcodex.coreui.Hairline
 import dev.spendcodex.coreui.Hint
 import dev.spendcodex.coreui.IconAction
+import dev.spendcodex.coreui.SectionCaption
 import dev.spendcodex.coreui.TextAction
 import dev.spendcodex.coreui.Token
 import dev.spendcodex.coreui.UnderlineField
@@ -87,7 +88,7 @@ fun SearchScreen(state: SearchUiState, vm: SearchViewModel, onBack: () -> Unit, 
         if (state.loaded && !f.isEmpty) {
             Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(summary(state.totals), style = AppTheme.type.caption.copy(fontFeatureSettings = "tnum"), modifier = Modifier.weight(1f).padding(vertical = 8.dp).testTag("search-summary"))
-                if (state.rows.isNotEmpty()) TextAction(Texts.EXPORT_FOUND, { onExport(f) }, Modifier.testTag("search-export"))
+                if (state.rows.isNotEmpty()) TextAction(Texts.EXPORT_FOUND, { onExport(vm.exportFilter()) }, Modifier.testTag("search-export"))
             }
         }
         val items = remember(state.rows) { feedItems(state.rows, headingFirst = true) }
@@ -145,7 +146,11 @@ private fun Options(field: SearchField, state: SearchUiState, vm: SearchViewMode
                     }
                 }
             }
-            SearchField.Types -> TxType.entries.forEach { t -> ChoiceRow(Texts.typeTitle(t), t in f.types, { vm.onType(t) }) }
+            SearchField.Types -> {
+                listOf(TxType.Expense, TxType.Refund).forEach { t -> ChoiceRow(Texts.typeTitle(t), t in f.types, { vm.onType(t) }) }
+                SectionCaption(Texts.LEGACY_TYPES)
+                listOf(TxType.Income, TxType.Transfer, TxType.Adjustment).forEach { t -> ChoiceRow(Texts.typeTitle(t), t in f.types, { vm.onType(t) }) }
+            }
             SearchField.Accounts -> state.names.accounts.forEach { a ->
                 ChoiceRow(a.name, a.id in f.accountIds, { vm.onAccount(a.id) }, caption = a.currency + if (a.archived) " · " + Texts.ARCHIVED.lowercase() else "")
             }

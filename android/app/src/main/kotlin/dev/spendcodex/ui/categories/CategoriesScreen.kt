@@ -49,7 +49,7 @@ fun CategoriesScreen(
     Column(modifier.fillMaxSize().background(AppTheme.colors.background).statusBarsPadding().navigationBarsPadding()) {
         PageHeader(Texts.CATEGORIES_AND_TAGS, onBack)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-            listOf(CategoryKind.Expense to Texts.EXPENSES, CategoryKind.Income to Texts.INCOMES).forEach { (kind, title) ->
+            listOf(CategoryKind.Expense to Texts.EXPENSES).forEach { (kind, title) ->
                 Row(Modifier.fillMaxWidth().padding(end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     SectionCaption(title, Modifier.weight(1f))
                     TextAction(Texts.ADD_CATEGORY, { onOpen(null, kind, null) }, Modifier.testTag("add-category-${kind.code}"))
@@ -106,12 +106,7 @@ fun CategoryEditScreen(state: CategoriesUiState, vm: CategoriesViewModel, onBack
                 UnderlineField(f.name, { v -> vm.edit { it.copy(name = v) } }, Modifier.testTag("category-name"), placeholder = Texts.NAME,
                     imeAction = ImeAction.Next, capitalization = KeyboardCapitalization.Sentences)
             }
-            SectionCaption(Texts.KIND)
-            val kindLocked = f.used > 0 || f.hasChildren || f.parentId != null
-            listOf(CategoryKind.Expense to Texts.EXPENSES, CategoryKind.Income to Texts.INCOMES).forEach { (k, label) ->
-                ChoiceRow(label, f.kind == k, { if (!kindLocked) vm.edit { it.copy(kind = k) } })
-            }
-            if (kindLocked && f.id != null) Hint(Texts.KIND_LOCKED)
+            if (f.kind != CategoryKind.Expense) StatRow(Texts.KIND, Texts.INCOMES, enabled = false)
             SectionCaption(Texts.PARENT)
             val parent = state.categories.firstOrNull { it.id == f.parentId }
             if (!f.hasChildren) {

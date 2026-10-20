@@ -132,7 +132,7 @@ Operations at the same date and time keep a stable order: by `created_at`, then 
 | `note` | free text, may have several lines |
 | `tag_ids` | sorted list of tag ids |
 | `refund_of` | refunds only: the expense this money came back for, if linked |
-| `origin` | how the record was made: `line` (the quick line), `form`, `ai` (read by DeepSeek from the user's line, then confirmed), `repeat`, `reconcile` (a balance check) |
+| `origin` | how the record was made: `line` (legacy local parser), `form`, `ai` (DeepSeek text entry, validated before saving), `repeat`, `reconcile` (legacy balance check) |
 | `input_text` | the line as the user typed it, when it came from the quick line or DeepSeek |
 
 ### Types
@@ -145,7 +145,15 @@ Operations at the same date and time keep a stable order: by `created_at`, then 
 | `transfer` | − amount from `account_id`, + (`to_amount` or `amount`) to `to_account_id` | money moved between the user's own accounts. **Neither spending nor income**: leave transfers out of both |
 | `adjustment` | + amount (signed) | the account's figure set right to reality (a forgotten cash purchase, bank fees found later). Neither spending nor income, unless the user says so |
 
-### The balance of an account
+### Legacy account balances
+
+Since app version 0.3, SpendCodex captures expenses and does not calculate account balances. Accounts are payment-method
+labels; historical opening amounts and non-expense records are preserved for lossless restoration. The legacy CSV columns
+`computed_balance` and `computed_balance_complete` are kept empty. The formula below describes older exports only.
+
+Likewise, `settings.ai_parsing_enabled` is retained from older backups for round-trip compatibility. In 0.3 and later,
+explicit text entry always uses DeepSeek when a key is available, regardless of this legacy flag. Categories and some tags
+on `origin=ai` records are model classifications; `input_text` preserves the user's original words.
 
 ```text
 balance = opening_balance (or 0)
@@ -155,7 +163,7 @@ balance = opening_balance (or 0)
 ```
 
 An operation in another currency counts with its `account_amount`. Without one it cannot be counted, and the balance is
-incomplete; `csv/accounts.csv` says so in `computed_balance_complete`. `computed_balance` is derived at export time and is not
+incomplete; older `csv/accounts.csv` files say so in `computed_balance_complete`. `computed_balance` was derived at export time and is not
 read back by a restore.
 
 ## CSV
@@ -211,4 +219,4 @@ also preserves its photos; this copy can be saved through the Data screen.
 
 ## What is not in an export
 
-The DeepSeek key (it never leaves the phone) and the app lock setting (a property of the phone, not of the data).
+The DeepSeek key (used only to authenticate requests, never exported) and the app lock setting (a property of the phone, not of the data).

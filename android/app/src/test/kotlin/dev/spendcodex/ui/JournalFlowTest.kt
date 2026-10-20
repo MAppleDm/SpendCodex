@@ -2,147 +2,135 @@ package dev.spendcodex.ui
 
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.test.assertTextContains
-import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onAllNodesWithTag
-import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.spendcodex.AppEnv
 import dev.spendcodex.coreui.AppTheme
+import dev.spendcodex.data.domain.Draft
 import dev.spendcodex.data.domain.Filter
-import dev.spendcodex.data.domain.Origin
 import dev.spendcodex.data.domain.TxType
+import dev.spendcodex.data.repo.SaveResult
 import dev.spendcodex.data.settings.Language
 import dev.spendcodex.ui.journal.JournalScreen
-import kotlinx.coroutines.flow.first
+import dev.spendcodex.ui.operation.OperationScreen
+import java.io.File
 import kotlinx.coroutines.runBlocking
 import org.junit.After
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
+import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Shadows
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
-/** The everyday path, through the real journal: type a line, see what it means, record it, take it back. */
 @RunWith(AndroidJUnit4::class)
 @Config(qualifiers = "w360dp-h740dp-xhdpi")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class JournalFlowTest {
     @get:Rule val compose = createComposeRule()
     private val env = AppEnv(Language.Ru)
-
     @Before fun seed() = runBlocking { env.ledger.seed(Language.Ru, "EUR") }
-
     @After fun close() = env.close()
 
-    private fun count() = runBlocking { env.ledger.count.first() }
-
-    private lateinit var vm: dev.spendcodex.ui.journal.JournalViewModel
-
-    private fun show() {
-        vm = env.journal()
-        compose.setContent {
-            AppTheme(darkTheme = false) {
-                val s by vm.state.collectAsState()
-                JournalScreen(s, vm, vm.effects, onOpen = {}, onForm = {}, onSearch = {}, onSettings = {}, onAccount = {})
-            }
-        }
-    }
-
-    /**
-     * Waits in real time: the view model's work hops between Room's threads and the main looper, which Robolectric only
-     * runs when asked, so each round lets time pass and runs what was posted to it.
-     */
     private fun settle(condition: () -> Boolean) {
-        val end = System.currentTimeMillis() + 5_000
+        val end = System.currentTimeMillis() + 10_000
         while (System.currentTimeMillis() < end) {
             compose.waitForIdle()
-            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
             if (condition()) return
             Thread.sleep(25)
         }
-        throw AssertionError("condition not met in 5 s")
+        throw AssertionError("condition not met")
     }
 
-    private fun waitFor(tag: String) = settle { compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty() }
-
-    @Test
-    fun `a line is read word by word, recorded with one tap, and can be taken back`() {
-        show()
-        compose.onNodeWithTag("empty").assertExists()
-        compose.onNodeWithContentDescription("кофе 4.50").performTextInput("кофе 4.50")
-        waitFor("token-amount")
-        compose.onNodeWithTag("token-amount").assertTextEquals("4,50 €")
-        compose.onNodeWithTag("token-category").assertTextContains("Кафе", substring = true)
-        compose.onNodeWithTag("token-account").assertTextEquals("Карта")
-        compose.onNodeWithTag("token-type").assertTextEquals("расход")
-
-        compose.onNodeWithContentDescription("Записать").performClick()
-        settle { count() == 1 }
-        waitFor("operation")
-        val tx = runBlocking { env.ledger.feedNow(Filter(), 10) }.single()
-        assertEquals("кофе", tx.description)
-        assertEquals(450L, tx.amountMinor)
-        assertEquals("Кафе и рестораны", tx.categoryName)
-        val stored = runBlocking { env.ledger.get(tx.id)!! }
-        assertEquals(Origin.Line, stored.origin)
-        assertEquals("кофе 4.50", stored.inputText)
-
-        // the line is empty again, and the notice offers to take it back
-        waitFor("notice")
-        compose.onNodeWithTag("notice-action").performClick()
-        settle { count() == 0 }
+    private fun screenshot(name: String) {
+        val dir = System.getProperty("screenshots.dir")?.let(::File) ?: return
+        dir.mkdirs()
+        compose.onRoot().captureToImage().asAndroidBitmap().let { image ->
+            File(dir, name).outputStream().use { image.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        }
     }
 
-    @Test
-    fun `a line without an amount cannot be recorded and says why`() {
-        show()
-        compose.onNodeWithContentDescription("кофе 4.50").performTextInput("кофе")
-        waitFor("preview-problem")
-        compose.onNodeWithTag("preview-problem").assertTextEquals("Не вижу суммы.")
-        compose.onNodeWithContentDescription("Записать").performClick()
-        compose.waitForIdle()
-        assertEquals(0, count())
+    @Test fun `manual entry is beside search and does not interrupt typing`() {
+        var forms = 0
+        var settings = 0
+        val vm = env.journal()
+        compose.setContent { AppTheme(darkTheme = false) {
+            val s by vm.state.collectAsState()
+            JournalScreen(s, vm, vm.effects, {}, { forms++ }, {}, {}, { settings++ })
+        } }
+        settle { vm.state.value.loaded }
+        compose.onNodeWithContentDescription("кофе 4.50").performTextInput("кофе 350")
+        compose.onNodeWithTag("open-form").performClick()
+        assertEquals(1, forms)
+        assertEquals("кофе 350", vm.state.value.composer.text)
+        val form = compose.onNodeWithTag("open-form").fetchSemanticsNode().boundsInRoot
+        val search = compose.onNodeWithTag("open-search").fetchSemanticsNode().boundsInRoot
+        val input = compose.onNodeWithTag("input").fetchSemanticsNode().boundsInRoot
+        assertEquals(search.top, form.top, 0.1f)
+        assertTrue(form.bottom < input.top)
+        compose.onNodeWithTag("balances").assertDoesNotExist()
+        compose.onNodeWithTag("connect-ai").performClick()
+        assertEquals(1, settings)
+        screenshot("ai-expense-empty.png")
     }
 
-    @Test
-    fun `tapping a word of the preview changes it before recording`() {
-        show()
-        compose.onNodeWithContentDescription("кофе 4.50").performTextInput("такси 12")
-        waitFor("token-type")
-        compose.onNodeWithTag("token-category").assertTextEquals("Транспорт")
-        compose.onNodeWithTag("token-type").performClick()
-        waitFor("picker")
-        compose.onNodeWithText("Доход").performClick()
-        settle { compose.onAllNodesWithTag("picker").fetchSemanticsNodes().isEmpty() }
-        compose.onNodeWithTag("token-type").assertTextEquals("доход")
-        // an expense category does not stay on an income
-        compose.onNodeWithTag("token-category").assertTextEquals("без категории")
-        compose.onNodeWithTag("token-account").performClick()
-        waitFor("picker")
-        compose.onNodeWithText("Наличные").performClick()
-        settle { compose.onAllNodesWithTag("picker").fetchSemanticsNodes().isEmpty() }
-        compose.onNodeWithContentDescription("Записать").performClick()
-        settle { count() == 1 }
-        val tx = runBlocking { env.ledger.feedNow(Filter(), 10) }.single()
-        assertEquals(TxType.Income.code, tx.type)
-        assertEquals("Наличные", tx.accountName)
-        assertEquals(null, tx.categoryId)
+    @Test fun `old income remains stored but the feed and daily total contain only expenses and refunds`() {
+        runBlocking {
+            env.ledger.save(Draft(type = TxType.Expense, amount = "10", description = "кофе"))
+            env.ledger.save(Draft(type = TxType.Income, amount = "3000", description = "старая зарплата"))
+            env.ledger.save(Draft(type = TxType.Refund, amount = "2", description = "возврат кофе"))
+        }
+        val vm = env.journal()
+        compose.setContent { AppTheme(darkTheme = false) {
+            val s by vm.state.collectAsState()
+            JournalScreen(s, vm, vm.effects, {}, {}, {}, {}, {})
+        } }
+        settle { vm.state.value.rows.size == 2 && vm.state.value.todayTotals.size == 2 }
+        compose.onNodeWithText("старая зарплата").assertDoesNotExist()
+        assertTrue(vm.state.value.todayTotals.all { it.type in setOf("expense", "refund") })
+        assertEquals(3, runBlocking { env.ledger.feedNow(Filter(), 10).size })
+        val search = env.search()
+        search.open("old-income", Filter(text = "старая"))
+        settle { search.state.value.loaded }
+        assertTrue(search.state.value.rows.isEmpty())
+        search.onType(TxType.Income)
+        settle { search.state.value.rows.size == 1 }
+        assertEquals(setOf(TxType.Income), search.exportFilter().types)
+        screenshot("ai-expense-journal.png")
     }
 
-    @Test
-    fun `several operations in one line are recorded together`() {
-        show()
-        compose.onNodeWithContentDescription("кофе 4.50").performTextInput("кофе 4.50, круассан 3")
-        settle { compose.onAllNodesWithTag("token-amount").fetchSemanticsNodes().size == 2 }
-        compose.onNodeWithContentDescription("Записать").performClick()
-        settle { count() == 2 }
-        assertTrue(runBlocking { env.ledger.feedNow(Filter(), 10) }.map { it.description }.containsAll(listOf("кофе", "круассан")))
+    @Test fun `manual form records an expense without income or balance controls`() {
+        val vm = env.operation()
+        vm.open("manual", OperationRequest.New(Draft(amount = "12.34", description = "обед")))
+        compose.setContent { AppTheme(darkTheme = false) {
+            val s by vm.state.collectAsState()
+            OperationScreen(s, vm, {})
+        } }
+        settle { !vm.state.value.form.loading }
+        compose.onNodeWithTag("type-income").assertDoesNotExist()
+        compose.onNodeWithTag("type-transfer").assertDoesNotExist()
+        compose.onNodeWithTag("form-save").performClick()
+        settle { runBlocking { env.ledger.feedNow(Filter(), 10).size == 1 } }
+        assertEquals("expense", runBlocking { env.ledger.feedNow(Filter(), 10).single().type })
+    }
+
+    @Test fun `editing a legacy income preserves its type and metadata`() {
+        val tx = runBlocking { (env.ledger.save(Draft(type = TxType.Income, amount = "3000", description = "зарплата")) as SaveResult.Saved).tx }
+        val vm = env.operation()
+        vm.open("legacy", OperationRequest.Edit(tx.id))
+        compose.setContent { AppTheme(darkTheme = false) {
+            val s by vm.state.collectAsState()
+            OperationScreen(s, vm, {})
+        } }
+        settle { !vm.state.value.form.loading }
+        compose.runOnIdle { vm.update { it.copy(note = "из старого журнала") } }
+        compose.onNodeWithTag("form-save").performClick()
+        settle { runBlocking { env.ledger.get(tx.id)?.note == "из старого журнала" } }
+        assertEquals(tx.copy(note = "из старого журнала"), runBlocking { env.ledger.get(tx.id) })
     }
 }

@@ -1,63 +1,78 @@
 # SpendCodex
 
-**English** · [Русский](README.ru.md)
+**English** · [Русский](README.ru.md) · [Download APK](https://github.com/MAppleDm/SpendCodex/releases/latest)
 
-A finance journal in a single line of text. From the same family as [FatCodex](https://github.com/MAppleDm/FatCodex).
+An expense journal with DeepSeek text entry. From the same family as [FatCodex](https://github.com/MAppleDm/FatCodex).
 
-Write it like a note, `coffee 4.50`, and SpendCodex shows what it understood word by word: expense, 4.50 €, Card, "Cafes & restaurants", today 16:41. One tap records it. No forms, no required fields, no account.
+Write **“coffee 4.50, taxi home 12 yesterday”** and send. DeepSeek extracts expenses, chooses categories and adds useful
+tags. Validated records save immediately, with undo. Tap any record to edit it. No chat or analytics dashboard.
 
-**Record everything. Own your data. Analyze anywhere.** The app collects and preserves the financial truth; an external AI (ChatGPT, Claude, Gemini, your own script) interprets it.
+## Get started
 
-## How it feels
+1. Choose your default currency, used when the note does not name one.
+2. Tap **Set up DeepSeek** and save your API key. A link to obtain a key is on that screen.
+   Text entry needs internet and a funded DeepSeek API account.
+3. Type naturally and send with the arrow or Enter. Typing alone never sends a request.
 
-- `coffee 4.50`: an expense in the default account's currency, categorised by the word
-- `taxi 12 yesterday`: dated yesterday, with **no invented time**
-- `+salary 3000`: income
-- `card → cash 100` or `100 from card to cash`: a transfer between your own accounts, neither spending nor income
-- `cash → dollars 100 108`: an exchange, 100 € left and $108 arrived
-- `refund shoes 59.99`: money back for a purchase
-- `lunch 15 $ = 13.80 €`: paid in dollars, the euro account moved 13.80
-- `coffee 4.50, croissant 3`: two operations in one line
-- `#tags` and `// a note`; dates like `fri`, `oct 12`, `15/10`, `2026-10-01`, `3 days ago`
+Examples: `coffee 4.50`, `taxi 12 yesterday`, `groceries 32.90 EUR`, `lunch 15 #work`, `coffee 4.50, bread 3`.
+Tags are optional in your text: DeepSeek adds relevant tags and reuses existing vocabulary.
+Unclear amounts, currencies or dates need clarification. An amount absent from the original note cannot be accepted
+through the AI confirmation action. Network failures preserve the note for retry.
 
-Every word the app understood sits above the line as a chip. Grey means a default, white means you wrote it, red needs attention. Tap a chip to change it. Doubtful readings are stated, never silently guessed. The full form (payee, note, tags, refund link, the account amount for another currency) is one tap away, and so is every record for editing, repeating, refunding or deleting with undo.
+**Manual entry** is the page-with-plus icon beside search in the header. It works offline without a key.
+The form includes amount, currency, category, date/time, merchant, tags, notes and receipt photos.
+Stored records support editing, repeating, purchase refunds and deletion with undo.
 
-The form has **Receipt photos → Camera / From gallery**, up to 10 photos per operation. Images are compressed locally;
-gallery originals stay unchanged. Tap a thumbnail, then pinch or double tap to read the receipt. Photo changes take effect
-when you save; removal has undo. Repeating an operation does not duplicate its old receipt.
+## Expenses only
 
-## Why the numbers can be trusted
+The header shows today's spending per currency. Card and cash balances are not calculated.
+Payment methods are labels, chosen in the form or recognised when explicitly named in text.
+There is no new income, own-account transfer or balance-adjustment entry. Purchase refunds are created from the
+original expense and displayed separately.
 
-Amounts are whole minor units (no floating point) with each currency's own number of decimals. Currencies are never added together. A transfer is never spending, a refund is never income. Unknown times stay unknown. Records keep their accounts and categories (enforced by SQLite foreign keys), sending the same line twice stores it once, and a deletion can be undone exactly.
+Older non-expense records remain intact. Find them under **Search → Type → Previously recorded operations**;
+full manual copies retain them. Default search and the main feed show expenses and refunds.
+Search combines text, dates, payment methods, categories, tags and currencies, and can export its results.
 
-## Your data
+## Receipts
 
-No account, no server. The network is used only for DeepSeek, which is off by default, uses your own key, and is used only for lines the rules could not read; and for the GitHub update check, only when you tap it.
+Open a record, then **Receipt photos → Camera / From gallery**, up to 10 photos. Images are compressed on the phone;
+gallery originals stay intact. Tap a thumbnail to zoom. Photo changes apply on save and removal has undo.
+Repeating a purchase does not duplicate its old receipt.
 
-**Data → Backup** saves `spendcodex-backup-YYYY-MM-DD.zip`: the whole journal as JSON, CSV tables, the format description and a JSON Schema, every file checksummed. It restores everything, on this phone or another, with a preview and a safety copy of what it replaces.
+## Data and precision
 
-Full manual copies include the saved receipt images and their links. All photos are checked before restoration; a missing
-or damaged photo refuses the copy without changing the journal. Older copies without photos still work. Analysis exports
-include photo metadata without images. Receipt images are never sent to DeepSeek.
+- Amounts are integer minor units with currency-specific precision. Excess decimals are refused, never rounded.
+- Currencies are never added together or automatically converted. Unknown times stay unknown.
+- Each batch saves atomically; repeated taps cannot duplicate it.
+- The original note is retained with `origin=ai`. Categories and tags are editable model classifications.
 
-**Data → Export for analysis** can be limited to a period, some accounts, with or without notes. The **For AI** package includes instructions for the model and a ready request; JSON and CSV are also available. Before anything is saved, you see what it holds.
+Each send submits **your typed note including its amounts**, today's date, time zone, default currency, payment-method
+names, categories with keywords and existing tag names to DeepSeek. Past records and receipt images are not sent.
+The key is encrypted on the device, used for authentication and excluded from exports. Saved records stay on the
+phone; there is no device sync.
 
-The format is documented in [docs/export/format.md](docs/export/format.md).
+Under **Settings → Data**:
 
-## Limits
+- **Backup**: a manual ZIP containing all records, photos, JSON, CSV, format documentation and checksums.
+- **Restore**: validate the copy, preserve current data in a safety copy, then replace the journal atomically.
+  Older copies without photos still work.
+- **Export for analysis**: an external-AI package, JSON or CSV, with period and note controls. Analysis exports include
+  photo metadata; image bytes are included only in full copies.
 
-The journal lives on one phone. Photos are compressed JPEGs, up to 10 per operation; legibility depends on the original
-capture. There are no exchange rates. This is an early personal project, tested on an Android 16 emulator.
+The format is documented in [docs/export/format.md](docs/export/format.md). RU/EN, biometric/PIN lock and GitHub updates
+are included, and two looks under **Settings → Theme**: black & white or avocado 🥑, both following the phone's light/dark mode.
 
 ## Build
+
+Android 8.0+, Kotlin/Compose/Room. Build with JDK 17+ and Android SDK 37:
 
 ```bash
 cd android
 ./gradlew assembleRelease
 ```
 
-See [docs/development.md](docs/development.md).
-
-## License
+See [docs/development.md](docs/development.md) for tests and signing. Without a custom keystore the APK uses the existing
+debug signing key. Automated checks use a stand-in DeepSeek server, not a live key or a physical phone.
 
 MIT, see [LICENSE](LICENSE).

@@ -82,11 +82,11 @@ fun IconAction(
         modifier
             .size(44.dp)
             .clip(CircleShape)
-            .background(if (active) c.foreground else Color.Transparent)
+            .background(if (active) c.accent else Color.Transparent)
             .tap(enabled = enabled, onClick = onClick)
             .semantics { this.contentDescription = contentDescription; role = Role.Button },
         contentAlignment = Alignment.Center,
-    ) { content(if (active) c.background else if (enabled) c.foreground else c.tertiary) }
+    ) { content(if (active) c.onAccent else if (enabled) c.foreground else c.tertiary) }
 }
 
 @Composable
@@ -94,7 +94,7 @@ fun TextAction(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    color: Color = AppTheme.colors.foreground,
+    color: Color = AppTheme.colors.accent,
     enabled: Boolean = true,
 ) {
     Text(
@@ -219,7 +219,7 @@ fun ChoiceRow(label: String, selected: Boolean, onClick: () -> Unit, modifier: M
             if (caption != null) Text(caption, style = AppTheme.type.caption, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         Spacer(Modifier.width(12.dp))
-        Text(if (selected) "●" else "", style = AppTheme.type.body, modifier = Modifier.width(16.dp), textAlign = TextAlign.End)
+        Text(if (selected) "●" else "", style = AppTheme.type.body.copy(color = AppTheme.colors.accent), modifier = Modifier.width(16.dp), textAlign = TextAlign.End)
     }
 }
 
@@ -242,7 +242,7 @@ fun FeedNote(text: String, tone: NoteTone, modifier: Modifier = Modifier, onClic
     val click = if (onClick != null) Modifier.tap(onClick = onClick) else Modifier
     Row(modifier.fillMaxWidth().then(click).padding(horizontal = 16.dp, vertical = 8.dp)) {
         if (tone == NoteTone.Question) {
-            Box(Modifier.width(1.dp).height(20.dp).background(c.foreground))
+            Box(Modifier.width(1.dp).height(20.dp).background(c.accent))
             Spacer(Modifier.width(10.dp))
         }
         Text(text, style = AppTheme.type.secondary.copy(color = if (tone == NoteTone.Question) c.foreground else color))
@@ -253,7 +253,7 @@ fun FeedNote(text: String, tone: NoteTone, modifier: Modifier = Modifier, onClic
 @Composable
 fun PanelTitle(text: String, modifier: Modifier = Modifier) {
     Row(modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 4.dp)) {
-        Box(Modifier.width(1.dp).height(20.dp).background(AppTheme.colors.foreground))
+        Box(Modifier.width(1.dp).height(20.dp).background(AppTheme.colors.accent))
         Spacer(Modifier.width(10.dp))
         Text(text, style = AppTheme.type.body)
     }
@@ -329,13 +329,13 @@ fun Token(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, weak
     }
     Text(
         text,
-        style = AppTheme.type.secondary.copy(color = if (active) c.background else color, fontFeatureSettings = "tnum"),
+        style = AppTheme.type.secondary.copy(color = if (active) c.onAccent else color, fontFeatureSettings = "tnum"),
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         modifier = modifier
             .clip(RoundedCornerShape(6.dp))
-            .background(if (active) c.foreground else Color.Transparent)
-            .border(1.dp, if (problem) c.error else if (active) c.foreground else c.border, RoundedCornerShape(6.dp))
+            .background(if (active) c.accent else Color.Transparent)
+            .border(1.dp, if (problem) c.error else if (active) c.accent else c.border, RoundedCornerShape(6.dp))
             .tap(onClick = onClick)
             .semantics { role = Role.Button }
             .padding(horizontal = 8.dp, vertical = 4.dp),
@@ -343,20 +343,19 @@ fun Token(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, weak
 }
 
 /**
- * The input of the journal: one line for "кофе 4.50", the full form beside it, and send once there is something to record.
+ * The journal's text input and send action. Secondary entry actions belong in the page header.
  */
 @Composable
 fun InputBar(
     value: String,
     onValueChange: (String) -> Unit,
     onSend: () -> Unit,
-    onForm: () -> Unit,
     canSend: Boolean,
     placeholder: String,
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
     sendDescription: String = CoreTexts.send,
-    formDescription: String = CoreTexts.form,
+    readOnly: Boolean = false,
     textStyle: TextStyle = AppTheme.type.body,
 ) {
     val c = AppTheme.colors
@@ -368,6 +367,7 @@ fun InputBar(
                 BasicTextField(
                     value = value,
                     onValueChange = onValueChange,
+                    readOnly = readOnly,
                     textStyle = textStyle,
                     maxLines = 4,
                     cursorBrush = SolidColor(c.foreground),
@@ -385,7 +385,6 @@ fun InputBar(
                         .semantics { contentDescription = placeholder },
                 )
             }
-            IconAction(onForm, formDescription) { FormIcon(it) }
             IconAction(onSend, sendDescription, enabled = canSend, active = canSend) { SendIcon(it) }
         }
     }

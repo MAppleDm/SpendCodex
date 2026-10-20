@@ -63,7 +63,6 @@ fun AccountsScreen(state: AccountsUiState, vm: AccountsViewModel, onBack: () -> 
 
 @Composable
 private fun AccountRow(a: Account, state: AccountsUiState, onOpen: (String?) -> Unit) {
-    val b = state.balances[a.id]
     val t = AppTheme.type
     Row(Modifier.fillMaxWidth().tap { onOpen(a.id) }.padding(horizontal = 16.dp, vertical = 10.dp).testTag("account-row"), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
@@ -71,13 +70,10 @@ private fun AccountRow(a: Account, state: AccountsUiState, onOpen: (String?) -> 
             val caption = listOfNotNull(
                 Texts.accountKind(a.kind), a.currency,
                 Texts.IS_DEFAULT.takeIf { a.id == state.defaultAccountId },
-                b?.takeIf { !it.openingKnown }?.let { Texts.BALANCE_NO_OPENING },
-                b?.takeIf { !it.complete }?.let { Texts.balanceIncomplete(it.unconverted) },
             ).joinToString(" · ")
             Text(caption, style = t.caption, maxLines = 2)
         }
         Spacer(Modifier.width(12.dp))
-        Text((if (b?.complete == false) "≈ " else "") + Format.money(b?.minor ?: 0, a.currency), style = t.mono)
     }
 }
 
@@ -86,7 +82,6 @@ private fun AccountRow(a: Account, state: AccountsUiState, onOpen: (String?) -> 
 fun AccountEditScreen(state: AccountsUiState, vm: AccountsViewModel, onBack: () -> Unit, modifier: Modifier = Modifier) {
     val f = state.form
     val t = AppTheme.type
-    val balance = f.id?.let { state.balances[it] }
     Column(modifier.fillMaxSize().background(AppTheme.colors.background).statusBarsPadding().imePadding()) {
         PageHeader(if (f.id == null) Texts.NEW_ACCOUNT else f.name.ifBlank { Texts.ACCOUNT }, onBack) {
             TextAction(Texts.SAVE, vm::onSave, Modifier.testTag("account-save"))
@@ -114,26 +109,12 @@ fun AccountEditScreen(state: AccountsUiState, vm: AccountsViewModel, onBack: () 
                     }
                 }
             }
-            SectionCaption(Texts.OPENING)
-            Column(Modifier.padding(horizontal = 16.dp)) {
-                UnderlineField(f.opening, { v -> vm.edit { it.copy(opening = v) } }, Modifier.testTag("account-opening"), placeholder = "—",
-                    keyboardType = KeyboardType.Decimal, mono = true)
-            }
-            Hint(Texts.OPENING_HINT)
             f.error?.let { Hint(it, Modifier.testTag("account-error"), color = AppTheme.colors.error) }
             if (f.id != null) {
                 Hairline(Modifier.padding(top = 12.dp))
                 if (!f.archived) {
                     StatRow(Texts.DEFAULT_ACCOUNT, if (state.defaultAccountId == f.id) Texts.YES else Texts.MAKE_DEFAULT,
                         enabled = state.defaultAccountId != f.id, onClick = vm::onMakeDefault)
-                    SectionCaption(Texts.RECONCILE)
-                    balance?.let { Hint(Texts.nowBalance(Format.money(it.minor, f.currency))) }
-                    Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        UnderlineField(f.reconcile, { v -> vm.edit { it.copy(reconcile = v) } }, Modifier.weight(1f).testTag("account-reconcile"),
-                            placeholder = "0", keyboardType = KeyboardType.Decimal, mono = true)
-                        TextAction(Texts.RECONCILE_DO, vm::onReconcile, Modifier.testTag("account-reconcile-do"), enabled = f.reconcile.isNotBlank())
-                    }
-                    Hint(Texts.RECONCILE_HINT)
                 }
                 f.message?.let { Hint(it, Modifier.testTag("account-message")) }
                 Hairline(Modifier.padding(top = 12.dp))

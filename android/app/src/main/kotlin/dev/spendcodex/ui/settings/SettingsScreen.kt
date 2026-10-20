@@ -17,6 +17,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import dev.spendcodex.coreui.Palette
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -72,6 +75,8 @@ fun SettingsScreen(
             StatRow(Texts.CATEGORIES_AND_TAGS, "›", Modifier.testTag("settings-categories"), onClick = onCategories)
             Hairline()
             StatRow(Texts.LANGUAGE, Texts.LANGUAGE_NAME, Modifier.testTag("settings-language"), onClick = vm::onLanguage)
+            val theme by vm.theme.collectAsState()
+            StatRow(Texts.THEME, Texts.themeName(Palette.of(theme)), Modifier.testTag("settings-theme"), onClick = vm::onTheme)
             val default = state.accounts.firstOrNull { it.id == state.choices.defaultAccountId && !it.archived } ?: state.accounts.firstOrNull { !it.archived }
             StatRow(Texts.DEFAULT_ACCOUNT, default?.name ?: "—", Modifier.testTag("settings-default-account"), onClick = vm::onToggleAccount)
             if (u.accountOpen) state.accounts.filter { !it.archived }.forEach { a -> ChoiceRow(a.name, a.id == default?.id, { vm.onAccount(a.id) }, caption = a.currency) }
@@ -83,7 +88,7 @@ fun SettingsScreen(
                     }
                 }
             }
-            StatRow(Texts.AI, if (state.choices.aiEnabled && state.hasKey) Texts.ON else Texts.OFF, Modifier.testTag("settings-ai"), onClick = onAi)
+            StatRow(Texts.AI, if (state.hasKey) Texts.AI_KEY_SET else "›", Modifier.testTag("settings-ai"), onClick = onAi)
             Hairline()
             StatRow(Texts.LOCK, if (lockOn) Texts.ON else Texts.OFF, Modifier.testTag("settings-lock"),
                 enabled = lockSupport == LockSupport.Ready || lockOn, onClick = onToggleLock)
@@ -113,11 +118,11 @@ fun SettingsScreen(
 @Composable
 fun AiScreen(state: SettingsUiState, vm: SettingsViewModel, onBack: () -> Unit, modifier: Modifier = Modifier) {
     val u = state.ui
+    val uri = androidx.compose.ui.platform.LocalUriHandler.current
     Column(modifier.fillMaxSize().background(AppTheme.colors.background).statusBarsPadding().imePadding()) {
         PageHeader(Texts.AI_TITLE, onBack)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).navigationBarsPadding()) {
             Text(Texts.AI_EXPLAIN, style = AppTheme.type.secondary, modifier = Modifier.padding(16.dp))
-            StatRow(Texts.AI_ENABLE, if (state.choices.aiEnabled && state.hasKey) Texts.ON else Texts.OFF, Modifier.testTag("ai-toggle"), onClick = vm::onToggleAi)
             SectionCaption(Texts.AI_KEY)
             if (state.hasKey) {
                 Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -132,6 +137,7 @@ fun AiScreen(state: SettingsUiState, vm: SettingsViewModel, onBack: () -> Unit, 
                 }
             }
             Hint(Texts.AI_KEY_HINT)
+            TextAction(Texts.AI_GET_KEY, { runCatching { uri.openUri("https://platform.deepseek.com/api_keys") } }, Modifier.padding(horizontal = 8.dp))
             u.keyMessage?.let { Hint(it, color = if (u.keyError) AppTheme.colors.error else AppTheme.colors.confirm) }
         }
     }

@@ -19,12 +19,10 @@ object Texts {
 
     // ---------- journal ----------
     val INPUT_PLACEHOLDER get() = t("кофе 4.50", "coffee 4.50")
-    val EMPTY_TITLE get() = t("Журнал пуст.", "The journal is empty.")
+    val EMPTY_TITLE get() = t("Запиши первый расход.", "Record your first expense.")
     val EMPTY_HINT get() = t(
-        "Пиши, как в заметках: «кофе 4.50», «такси 12 вчера», «+зарплата 3000», «карта → наличные 100», «возврат кроссовки 59.99». " +
-            "Теги через #, заметка после //. Кнопка слева от «записать» открывает полную форму.",
-        "Write it like a note: “coffee 4.50”, “taxi 12 yesterday”, “+salary 3000”, “card → cash 100”, “refund shoes 59.99”. " +
-            "Tags with #, a note after //. The button left of “record” opens the full form.",
+        "Напиши, как было: «кофе 350», «вчера такси домой 820». DeepSeek разберёт расходы, выберет категории и теги. Одно нажатие — запись готова. Исправить её можно в ленте.",
+        "Write what happened: “coffee 4.50”, “taxi home 12 yesterday”. DeepSeek reads the expenses and chooses categories and tags. Send once to save. Tap a record to edit it.",
     )
     val TODAY get() = t("сегодня", "today")
     val YESTERDAY get() = t("вчера", "yesterday")
@@ -36,6 +34,8 @@ object Texts {
     val NO_ACCOUNTS get() = t("Нет счетов. Добавь счёт в настройках.", "No accounts. Add one in settings.")
     val CD_SEARCH get() = t("Поиск", "Search")
     val CD_SETTINGS get() = t("Настройки", "Settings")
+    val MANUAL_ENTRY get() = t("Добавить вручную", "Add manually")
+    val EDIT get() = t("исправить", "edit")
     val LOAD_MORE get() = t("ещё", "more")
 
     fun recorded(n: Int, what: String) = if (n == 1) t("Записано: $what", "Recorded: $what") else t("Записано операций: $n", "Recorded: $n operations")
@@ -50,13 +50,25 @@ object Texts {
     val SUGGESTIONS get() = t("Как раньше", "Like before")
     val NO_CATEGORY get() = t("без категории", "no category")
     val SEND_TO_AI get() = t("Строку прочитает DeepSeek: нажми «записать».", "DeepSeek will read the line: tap “record”.")
-    val AI_READING get() = t("DeepSeek читает строку…", "DeepSeek is reading the line…")
-    val AI_RESULT get() = t("Записать?", "Record these?")
+    val AI_READING get() = t("DeepSeek разбирает расход…", "DeepSeek is reading the expense…")
+    val AI_SAVING get() = t("Сохраняю…", "Saving…")
+    val AI_RESULT get() = t("Уточни перед записью", "Check before recording")
     val AI_DROP get() = t("не записывать", "discard")
     val AI_RECORD get() = t("записать", "record")
     val AI_RETRY get() = t("повторить", "try again")
     val AI_CLOSE get() = t("закрыть", "close")
-    val AI_AMOUNT_NOT_IN_TEXT get() = t("суммы нет в тексте: проверь", "this amount is not in the text: check it")
+    val AI_AMOUNT_NOT_IN_TEXT get() = t("Этой суммы нет в тексте. Уточни расход или исправь сумму вручную.", "This amount is not in your text. Clarify the expense or correct the amount manually.")
+    val AI_SEND get() = t("Записать через DeepSeek", "Record with DeepSeek")
+    val AI_CONNECT get() = t("Настроить DeepSeek", "Set up DeepSeek")
+    val AI_CONNECT_HINT get() = t("Для ввода текстом нужен ключ DeepSeek.", "Text entry needs a DeepSeek key.")
+    val AI_INPUT_LONG get() = t("Слишком длинная запись. Раздели её на несколько сообщений.", "This note is too long. Split it into several messages.")
+    val AI_EXPENSES_ONLY get() = t("Здесь записываем расходы. Доходы, переводы и остатки в журнал не добавлены. Возврат можно оформить из покупки.", "This journal records expenses. Income, transfers and balances were not added. Open a purchase to record its refund.")
+    val AI_NEEDS_AMOUNT get() = t("Укажи сумму каждого расхода — DeepSeek не будет её угадывать.", "Add the amount of each expense. DeepSeek will not guess it.")
+    val AI_UNCLEAR get() = t("Не удалось однозначно понять расход. Уточни сумму, покупку или дату.", "The expense is unclear. Clarify the amount, purchase or date.")
+    val AI_BAD_CURRENCY get() = t("DeepSeek вернул неизвестную валюту. Уточни её в тексте.", "DeepSeek returned an unknown currency. Specify it in the text.")
+    val AI_BAD_DATE get() = t("DeepSeek вернул некорректную или будущую дату. Уточни её.", "DeepSeek returned an invalid or future date. Clarify it.")
+    val AI_BAD_TIME get() = t("DeepSeek вернул некорректное время. Уточни его.", "DeepSeek returned an invalid time. Clarify it.")
+    val AI_BAD_TAGS get() = t("DeepSeek вернул некорректные теги. Исправь запись или повтори разбор.", "DeepSeek returned invalid tags. Edit the record or try again.")
     fun aiUnknownAccount(name: String) = t("счёта «$name» нет: взят основной", "no account “$name”: the default is used")
     fun aiUnknownCategory(name: String) = t("категории «$name» нет", "no category “$name”")
     fun aiFailed(detail: String) = t("DeepSeek не помог: $detail", "DeepSeek could not help: $detail")
@@ -93,14 +105,14 @@ object Texts {
     }
 
     // ---------- operation form ----------
-    val NEW_OPERATION get() = t("Новая операция", "New operation")
+    val NEW_OPERATION get() = t("Новый расход", "New expense")
     val OPERATION get() = t("Операция", "Operation")
     val RECORD get() = t("записать", "record")
     val SAVE get() = t("сохранить", "save")
     val CANCEL get() = t("отмена", "cancel")
     val AMOUNT get() = t("Сумма", "Amount")
     val CURRENCY get() = t("Валюта", "Currency")
-    val ACCOUNT get() = t("Счёт", "Account")
+    val ACCOUNT get() = t("Способ оплаты", "Payment method")
     val TO_ACCOUNT get() = t("Куда", "To")
     fun accountAmount(code: String) = t("Списано со счёта, $code", "Taken from the account, $code")
     fun accountAmountIncome(code: String) = t("Зачислено на счёт, $code", "Added to the account, $code")
@@ -114,7 +126,7 @@ object Texts {
     val TIME_UNKNOWN get() = t("не указано", "not set")
     val TIME_HINT get() = t("ЧЧ:ММ", "HH:MM")
     val DESCRIPTION get() = t("Что это было", "What it was")
-    val PAYEE get() = t("Кому или от кого", "Paid to / from")
+    val PAYEE get() = t("Магазин или получатель", "Merchant or payee")
     val TAGS get() = t("Теги", "Tags")
     val TAGS_HINT get() = t("через пробел: работа отпуск", "separated by spaces: work trip")
     val NOTE get() = t("Заметка", "Note")
@@ -172,7 +184,8 @@ object Texts {
     val SEARCH_PLACEHOLDER get() = t("Поиск: слово, сумма, счёт, тег", "Search: a word, an amount, an account, a tag")
     val PERIOD get() = t("Период", "Period")
     val TYPES get() = t("Тип", "Type")
-    val ACCOUNTS get() = t("Счета", "Accounts")
+    val LEGACY_TYPES get() = t("Ранее записанные операции", "Previously recorded operations")
+    val ACCOUNTS get() = t("Способы оплаты", "Payment methods")
     val CATEGORIES get() = t("Категории", "Categories")
     val CURRENCIES get() = t("Валюта", "Currency")
     val RESET get() = t("сбросить", "reset")
@@ -197,15 +210,15 @@ object Texts {
     fun selected(n: Int) = t("выбрано: $n", "$n selected")
 
     // ---------- accounts ----------
-    val ADD_ACCOUNT get() = t("+ счёт", "+ account")
-    val NEW_ACCOUNT get() = t("Новый счёт", "New account")
+    val ADD_ACCOUNT get() = t("+ добавить", "+ add")
+    val NEW_ACCOUNT get() = t("Способ оплаты", "Payment method")
     val NAME get() = t("Название", "Name")
     val KIND get() = t("Вид", "Kind")
     val OPENING get() = t("Начальный остаток", "Opening balance")
     val OPENING_HINT get() = t("Сколько было на счёте, когда начался учёт. Пусто: не задан, тогда остаток показывает только движение.",
         "What was there when the journal started. Empty: not set, then the balance is only the movement since.")
     val CURRENCY_LOCKED get() = t("Валюту нельзя сменить: у счёта есть операции.", "The currency cannot change: the account has operations.")
-    val DEFAULT_ACCOUNT get() = t("Основной счёт", "Default account")
+    val DEFAULT_ACCOUNT get() = t("Оплата по умолчанию", "Default payment method")
     val MAKE_DEFAULT get() = t("сделать основным", "make default")
     val IS_DEFAULT get() = t("основной", "default")
     val RECONCILE get() = t("Сверить остаток", "Check the balance")
@@ -231,10 +244,10 @@ object Texts {
     val PARENT get() = t("Внутри категории", "Inside category")
     val PARENT_NONE get() = t("нет, верхний уровень", "none, top level")
     val KEYWORDS get() = t("Слова для быстрой строки", "Words for the quick line")
-    val KEYWORDS_HINT get() = t("Через запятую: кофе, капучино. Строка «кофе 4.50» попадёт в эту категорию.", "Comma separated: coffee, latte. “coffee 4.50” goes to this category.")
+    val KEYWORDS_HINT get() = t("Через запятую: кофе, капучино. Подсказки для выбора категории в DeepSeek.", "Comma separated: coffee, latte. Hints for DeepSeek when choosing a category.")
     val KIND_LOCKED get() = t("Вид нельзя сменить: категория используется.", "The kind cannot change: the category is in use.")
     val TAG get() = t("Тег", "Tag")
-    val NO_TAGS get() = t("Тегов пока нет. Они появляются из быстрой строки: «кофе 4.50 #работа».", "No tags yet. They come from the quick line: “coffee 4.50 #work”.")
+    val NO_TAGS get() = t("DeepSeek добавит теги при записи расходов. Свои можно указать через # или в форме.", "DeepSeek adds tags when recording expenses. Add your own with # or in the form.")
     fun uses(n: Int) = t("$n ${plural(n, "операция", "операции", "операций")}", "$n ${if (n == 1) "operation" else "operations"}")
 
     fun editError(e: EditError) = when (e) {
@@ -351,7 +364,12 @@ object Texts {
     val SETTINGS get() = t("Настройки", "Settings")
     val LANGUAGE get() = t("Язык", "Language")
     val LANGUAGE_NAME get() = t("Русский", "English")
-    val DEFAULT_CURRENCY get() = t("Валюта новых счетов", "Currency for new accounts")
+    val THEME get() = t("Тема", "Theme")
+    fun themeName(p: dev.spendcodex.coreui.Palette) = when (p) {
+        dev.spendcodex.coreui.Palette.Mono -> t("чёрно-белая", "black & white")
+        dev.spendcodex.coreui.Palette.Avocado -> t("авокадо 🥑", "avocado 🥑")
+    }
+    val DEFAULT_CURRENCY get() = t("Валюта по умолчанию", "Default currency")
     val AI get() = "DeepSeek"
     val ON get() = t("вкл", "on")
     val OFF get() = t("выкл", "off")
@@ -367,8 +385,8 @@ object Texts {
     val LOCK_TITLE_OFF get() = t("Выключить блокировку", "Turn the lock off")
     val ABOUT get() = t("О приложении", "About")
     val ABOUT_TEXT get() = t(
-        "SpendCodex записывает и хранит, но не анализирует. Данные лежат только на этом телефоне, без аккаунта и сервера. Для анализа выгрузи их и отдай любой модели или таблице.",
-        "SpendCodex records and keeps; it does not analyse. The data lives only on this phone, with no account or server. To analyse it, export it to any model or spreadsheet.",
+        "Журнал расходов с вводом через DeepSeek. Пиши обычным текстом — сумма, категория и теги появятся в записи. Для анализа выгрузи данные в любую модель или таблицу.",
+        "An expense journal with DeepSeek text entry. Write naturally to capture the amount, category and tags. Export your data to any model or spreadsheet for analysis.",
     )
     fun version(v: String) = t("Версия $v · MIT", "Version $v · MIT")
     val SOURCE get() = t("Исходный код на GitHub", "Source code on GitHub")
@@ -379,14 +397,15 @@ object Texts {
     // DeepSeek
     val AI_TITLE get() = t("Разбор строки через DeepSeek", "Reading the line with DeepSeek")
     val AI_EXPLAIN get() = t(
-        "По умолчанию строка разбирается на телефоне, по правилам. Если включить DeepSeek, то строки, которые правила не поняли (нет суммы, сложная фраза), " +
-            "уйдут в DeepSeek с твоим ключом. Отправляется только эта строка, сегодняшняя дата и названия твоих счетов и категорий. Суммы, остатки и история операций не отправляются. " +
-            "Ответ модели проверяется как обычный ввод и ждёт твоего «записать».",
-        "By default the line is read on the phone, by rules. With DeepSeek on, lines the rules could not read (no amount, a complex phrase) " +
-            "go to DeepSeek with your key. Only that line, today's date and the names of your accounts and categories are sent. Amounts, balances and past operations are not. " +
-            "The model's answer is checked like typed input and waits for your “record”.",
+        "Нажатие на стрелку отправляет твой текст в DeepSeek с твоим ключом. Модель выделяет расходы, выбирает категории и добавляет теги. " +
+            "После проверки записи сохраняются сразу; отмена доступна в ленте. Неоднозначный ответ потребует уточнения. " +
+            "Вместе с текстом отправляются текущая дата, часовой пояс, основная валюта, названия способов оплаты, категории с ключевыми словами и названия тегов. История и фото чеков не отправляются. Нужны интернет и средства на API-аккаунте DeepSeek.",
+        "The send arrow submits your text to DeepSeek using your key. The model extracts expenses, chooses categories and adds tags. " +
+            "Validated records save immediately, with undo in the journal. Unclear answers need clarification. " +
+            "The request includes today's date, time zone, default currency, payment method names, categories with keywords and tag names. Past records and receipt photos are not sent. Internet and a funded DeepSeek API account are required.",
     )
     val AI_KEY get() = t("Ключ DeepSeek", "DeepSeek key")
+    val AI_GET_KEY get() = t("Получить ключ DeepSeek ↗", "Get a DeepSeek key ↗")
     val AI_KEY_HINT get() = t("Хранится зашифрованным только на этом телефоне; не попадает ни в копии, ни в выгрузки.", "Kept encrypted on this phone only; never in backups or exports.")
     val AI_KEY_SET get() = t("ключ сохранён", "key saved")
     val AI_KEY_BAD get() = t("Это не похоже на ключ.", "This does not look like a key.")
@@ -396,10 +415,10 @@ object Texts {
     val AI_NEEDS_KEY get() = t("Сначала сохрани ключ.", "Save a key first.")
 
     // ---------- first start ----------
-    val SETUP_TAGLINE get() = t("Финансовый журнал. Записывай всё, данные твои, анализируй где угодно.", "A finance journal. Record everything, own your data, analyse anywhere.")
+    val SETUP_TAGLINE get() = t("Просто расходы. Пиши, как было, — DeepSeek разберёт и расставит теги.", "Just expenses. Write what happened. DeepSeek sorts the details and tags.")
     val SETUP_CURRENCY get() = t("Основная валюта", "Main currency")
-    val SETUP_CURRENCY_HINT get() = t("В ней будут два первых счёта, «Карта» и «Наличные». Валюту операции можно указать любую, счета можно добавить в других валютах.",
-        "The first two accounts, Card and Cash, will be in it. Any operation can be in any currency; accounts in other currencies can be added.")
+    val SETUP_CURRENCY_HINT get() = t("Используется, если валюта не указана в тексте. Для ввода нужен твой ключ DeepSeek; его можно добавить на следующем экране. Ручной ввод — рядом с поиском.",
+        "Used when your text does not name a currency. Add your DeepSeek key on the next screen. Manual entry is beside search.")
     val OTHER_CURRENCIES get() = t("другие валюты", "other currencies")
     val START get() = t("Начать", "Start")
     val SETUP_RESTORE get() = t("восстановить из резервной копии", "restore from a backup")

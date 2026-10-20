@@ -43,6 +43,7 @@ data class Choices(
     val language: Language,
     val defaultCurrency: String?,
     val defaultAccountId: String?,
+    /** Legacy backup preference. Since 0.3 text entry always uses DeepSeek; this field is kept for old backups. */
     val aiEnabled: Boolean,
 )
 
@@ -60,6 +61,18 @@ class Settings @Inject constructor(@ApplicationContext context: Context) {
     private val _setupDone = MutableStateFlow(prefs.getBoolean(SETUP, false))
     /** False until the first start chose a currency (or a backup was restored). */
     val setupDone: StateFlow<Boolean> = _setupDone.asStateFlow()
+
+    private val _theme = MutableStateFlow(prefs.getString(THEME, null) ?: DEFAULT_THEME)
+    /**
+     * The look of the app ("mono", "avocado"): a property of this phone, like the lock. Not part of the journal, so not in
+     * exports, and kept by "Стереть всё".
+     */
+    val theme: StateFlow<String> = _theme.asStateFlow()
+
+    fun setTheme(code: String) {
+        prefs.edit { putString(THEME, code) }
+        _theme.value = code
+    }
 
     private val _lastBackupAt = MutableStateFlow(prefs.getLong(LAST_BACKUP, 0L).takeIf { it > 0 })
     /** When a full backup was last saved out of the app (epoch ms), for the reminder on the data page. */
@@ -103,10 +116,11 @@ class Settings @Inject constructor(@ApplicationContext context: Context) {
         _lastBackupAt.value = at
     }
 
-    /** "Стереть всё": back to a first start, in the same language. */
+    /** "Стереть всё": back to a first start, in the same language and look. */
     fun reset() {
         val language = _choices.value.language
-        prefs.edit { clear(); putString(LANGUAGE, language.code) }
+        val theme = _theme.value
+        prefs.edit { clear(); putString(LANGUAGE, language.code); putString(THEME, theme) }
         _choices.value = Choices(language, null, null, false)
         _setupDone.value = false
         _lastBackupAt.value = null
@@ -119,5 +133,7 @@ class Settings @Inject constructor(@ApplicationContext context: Context) {
         const val AI = "ai_enabled"
         const val SETUP = "setup_done"
         const val LAST_BACKUP = "last_backup_at"
+        const val THEME = "theme"
+        const val DEFAULT_THEME = "mono"
     }
 }

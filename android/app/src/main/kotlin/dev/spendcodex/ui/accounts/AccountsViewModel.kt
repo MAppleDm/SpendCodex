@@ -7,11 +7,9 @@ import dev.spendcodex.Format
 import dev.spendcodex.Texts
 import dev.spendcodex.data.domain.Account
 import dev.spendcodex.data.domain.AccountKind
-import dev.spendcodex.data.domain.Balance
 import dev.spendcodex.data.repo.AccountEdit
 import dev.spendcodex.data.repo.EditResult
 import dev.spendcodex.data.repo.Ledger
-import dev.spendcodex.data.repo.SaveResult
 import dev.spendcodex.data.settings.Settings
 import dev.spendcodex.ui.Notice
 import dev.spendcodex.ui.Notices
@@ -45,7 +43,6 @@ data class AccountForm(
 
 data class AccountsUiState(
     val accounts: List<Account> = emptyList(),
-    val balances: Map<String, Balance> = emptyMap(),
     val defaultAccountId: String? = null,
     val form: AccountForm = AccountForm(),
     val archivedOpen: Boolean = false,
@@ -62,9 +59,9 @@ class AccountsViewModel @Inject constructor(
     private val _closed = Channel<Unit>(Channel.BUFFERED)
     val closed: Flow<Unit> = _closed.receiveAsFlow()
 
-    val state: StateFlow<AccountsUiState> = combine(ledger.accounts, ledger.balances, settings.choices, form, archivedOpen) { a, b, c, f, open ->
+    val state: StateFlow<AccountsUiState> = combine(ledger.accounts, settings.choices, form, archivedOpen) { a, c, f, open ->
         val default = c.defaultAccountId?.takeIf { id -> a.any { it.id == id && !it.archived } } ?: a.firstOrNull { !it.archived }?.id
-        AccountsUiState(a, b, default, f, open)
+        AccountsUiState(a, default, f, open)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AccountsUiState())
 
     fun onToggleArchived() = archivedOpen.update { !it }
@@ -129,17 +126,4 @@ class AccountsViewModel @Inject constructor(
         }
     }
 
-    fun onReconcile() {
-        val f = form.value
-        val id = f.id ?: return
-        viewModelScope.launch {
-            when (val r = ledger.reconcile(id, f.reconcile)) {
-                null -> form.update { it.copy(message = Texts.RECONCILE_SAME, reconcile = "") }
-                is SaveResult.Invalid -> form.update { it.copy(error = r.problems.joinToString(" ") { p -> Texts.problem(p) }) }
-                is SaveResult.Saved -> form.update {
-                    it.copy(reconcile = "", used = true, message = Texts.reconciled(Format.money(r.tx.amountMinor, r.tx.currency, withSign = true)))
-                }
-            }
-        }
-    }
 }

@@ -37,7 +37,7 @@ class AiReaderTest {
         today = today, timeZone = "Europe/Berlin", english = false,
         accounts = listOf(Account("card", "Карта", AccountKind.Card, "EUR", 1_000_000, 0, 0), Account("cash", "Наличные", AccountKind.Cash, "EUR", null, 0, 0)),
         categories = listOf(Category("cafe", "Кафе", CategoryKind.Expense, null, emptyList(), 0, 0), Category("salary", "Зарплата", CategoryKind.Income, null, emptyList(), 0, 0)),
-        defaultCurrency = "EUR",
+        defaultCurrency = "EUR", tags = listOf("утро"),
     )
 
     @Before fun start() {
@@ -67,15 +67,17 @@ class AiReaderTest {
         assertTrue(user.contains("\"Карта\"") && user.contains("\"Кафе\"") && user.contains("2026-10-20"))
         // the opening balance of an account (10 000,00) is not part of what is sent
         assertFalse(user.contains("1000000") || user.contains("10000"))
+        assertFalse(user.contains("Зарплата"))
+        assertTrue(user.contains("existing_tags") && user.contains("утро"))
     }
 
     @Test
     fun `operations come back as drafts with names turned into ids`() = runTest {
         server.enqueue(answer("""{"operations":[
             {"type":"expense","amount":"4.50","description":"кофе","category":"Кафе","account":"наличные","date":"2026-10-19","time":"08:30","tags":["#утро"]},
-            {"type":"income","amount":"3000","description":"зарплата","category":"Зарплата"}
+            {"type":"expense","amount":"12","description":"такси","tags":["транспорт"]}
         ]}"""))
-        val drafts = reader.read("кофе 4.50 вчера в 8:30 налом #утро и зарплата 3000", ctx)
+        val drafts = reader.read("кофе 4.50 вчера в 8:30 налом #утро и такси 12", ctx)
         assertEquals(2, drafts.size)
         val coffee = drafts[0]
         assertEquals(TxType.Expense, coffee.draft.type)
@@ -87,7 +89,7 @@ class AiReaderTest {
         assertEquals(listOf("утро"), coffee.draft.tags)
         assertEquals(Origin.Ai, coffee.draft.origin)
         assertTrue(coffee.amountInText)
-        assertEquals("salary", drafts[1].draft.categoryId)
+        assertEquals(listOf("транспорт"), drafts[1].draft.tags)
         assertTrue(drafts[1].amountInText)
     }
 
@@ -100,6 +102,7 @@ class AiReaderTest {
         assertEquals("Рестораны", d.unknownCategory)
         assertNull(d.draft.accountId)
         assertNull(d.draft.date)
+        assertTrue(AiIssue.Date in d.issues)
     }
 
     @Test
@@ -123,6 +126,50 @@ class AiReaderTest {
         assertTrue(AiReader.numberInText("12000", "ноутбук 12к"))
         assertFalse(AiReader.numberInText("15", "обед 30 пополам"))
         assertFalse(AiReader.numberInText("abc", "обед 30"))
+    }
+
+    @Test fun `income transfers and refunds never become expenses even if the model ignores the schema`() = runTest {
+        for (type in listOf("income", "transfer", "refund", "adjustment", "unknown")) {
+            server.enqueue(answer("""{"operations":[{"type":"$type","amount":"3000","description":"зарплата"}]}"""))
+            try { reader.read("зарплата 3000", ctx); fail(type) } catch (e: AiFailure.Input) { assertEquals("unsupported", e.reason) }
+        }
+    }
+
+    @Test fun `missing amounts and ambiguous notes ask for clarification`() = runTest {
+        for (status in listOf("needs_amount", "unsupported", "unclear")) {
+            server.enqueue(answer("""{"status":"$status","operations":[]}"""))
+            try { reader.read("кофе", ctx); fail(status) } catch (e: AiFailure.Input) { assertEquals(status, e.reason) }
+        }
+    }
+
+    @Test fun `a malformed or duplicated batch is refused in full instead of silently dropping an item`() = runTest {
+        val op = """{"type":"expense","amount":"4.50","description":"кофе","tags":["кофе"]}"""
+        for (ops in listOf("$op,null", "$op,{}", "$op,$op")) {
+            server.enqueue(answer("""{"operations":[$ops]}"""))
+            try { reader.read("кофе 4.50", ctx); fail(ops) } catch (e: AiFailure.BadOutput) { }
+        }
+    }
+
+    @Test fun `invalid currency date time and tags are surfaced instead of becoming silent defaults`() = runTest {
+        server.enqueue(answer("""{"operations":[{"type":"expense","amount":"4.50","description":"кофе","currency":"XXX-NO","date":"2026-02-30","time":"25:00","tags":["два слова"]}]}"""))
+        val result = reader.read("кофе 4.50", ctx).single()
+        assertEquals(AiIssue.entries.toSet(), result.issues.toSet())
+    }
+
+    @Test fun `subcategory paths and generated tags are preserved and existing tags are offered as vocabulary`() = runTest {
+        val child = Category("espresso", "Эспрессо", CategoryKind.Expense, "cafe", listOf("эспрессо"), 0, 0)
+        server.enqueue(answer("""{"operations":[{"type":"expense","amount":"4.50","description":"эспрессо","category":"Кафе › Эспрессо","tags":["#утро","кофе","КОФЕ"]}]}"""))
+        val result = reader.read("эспрессо 4.50", ctx.copy(categories = ctx.categories + child)).single()
+        assertEquals("espresso", result.draft.categoryId)
+        assertEquals(listOf("утро", "кофе"), result.draft.tags)
+        assertTrue(result.issues.isEmpty())
+        val request = server.takeRequest().body.readUtf8()
+        assertTrue(request.contains("existing_tags") && request.contains("Кафе › Эспрессо"))
+    }
+
+    @Test fun `a truncated answer is refused even when its JSON can be decoded`() = runTest {
+        server.enqueue(MockResponse().setBody("""{"choices":[{"finish_reason":"length","message":{"content":"{\"operations\":[]}"}}]}"""))
+        try { reader.read("кофе 4.50", ctx); fail() } catch (e: AiFailure.BadOutput) { assertEquals("incomplete answer", e.detail) }
     }
 
     @Suppress("unused")

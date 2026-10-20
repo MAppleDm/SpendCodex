@@ -312,7 +312,7 @@ class LedgerTest {
         assertEquals(accounts.first().id, env.settings.choices.value.defaultAccountId)
         val categories = ledger.categoriesNow()
         assertTrue(categories.any { it.name == "Кафе и рестораны" && "кофе" in it.keywords })
-        assertTrue(categories.any { it.kind == CategoryKind.Income && it.name == "Зарплата" })
+        assertTrue(categories.all { it.kind == CategoryKind.Expense })
         ledger.seed(Language.En, "EUR") // a journal that has accounts is not seeded again
         assertEquals(2, ledger.accountsNow().size)
     }
