@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android Auto Backup (Android 11 and older): the journal and the choices travel, nothing else does.
+  Deliberately NOT listed: secrets.xml (the DeepSeek key, encrypted with a key that never leaves this phone anyway),
+  lock.xml (a property of this phone), the update download state.
+  This is a convenience on top of SpendCodex's own backup file, not a replacement for it.
+-->
+<full-backup-content>
+    <include domain="database" path="spendcodex.db" />
+    <include domain="database" path="spendcodex.db-wal" />
+    <include domain="database" path="spendcodex.db-shm" />
+    <include domain="sharedpref" path="app.xml" />
+</full-backup-content>

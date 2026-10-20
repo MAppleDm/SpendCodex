@@ -1,0 +1,5 @@
+Analyse the attached history of my finances from SpendCodex. Read README_FOR_AI.md first: it describes the files and fields.
+
+Use only the facts in the files. Do not invent missing operations. Do not mix currencies without conversion, and if you convert, state the rate. Do not count transfers between my own accounts (type = transfer) or adjustments (adjustment) as spending or income. Subtract refunds (refund) from spending; do not add them to income. If the data is not enough for a conclusion, say so plainly and explain what is missing.
+
+My question:

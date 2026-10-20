@@ -1,0 +1,44 @@
+# secrets
+*.jks
+*.keystore
+keystore.properties
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx
+
+# local journals and generated exports
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+spendcodex-backup-*.zip
+spendcodex-before-restore*.zip
+spendcodex-ai-*.zip
+spendcodex-csv-*.zip
+spendcodex-transactions-*.csv
+spendcodex-????-??-??.json
+*.log
+
+# android / gradle
+android/.gradle/
+android/.kotlin/
+android/build/
+android/**/build/
+android/local.properties
+android/captures/
+android/.idea/
+*.iml
+*.apk
+*.aab
+
+# editors / os
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# screenshots rendered locally, not published
+docs/screenshots/

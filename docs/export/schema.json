@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/MAppleDm/SpendCodex/docs/export/schema.json",
+  "title": "SpendCodex data file, format versions 1 and 2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "format_version", "schema_version", "exported_at", "app", "scope", "settings", "currencies", "accounts", "categories", "tags", "transactions"],
+  "properties": {
+    "format": { "const": "spendcodex" },
+    "format_version": { "enum": [1, 2] },
+    "schema_version": { "type": "integer", "minimum": 1 },
+    "exported_at": { "$ref": "#/$defs/instant" },
+    "app": {
+      "type": "object", "additionalProperties": false, "required": ["name", "version"],
+      "properties": { "name": { "type": "string" }, "version": { "type": "string" } }
+    },
+    "scope": {
+      "type": "object", "additionalProperties": false, "required": ["kind", "notes_included"],
+      "properties": {
+        "kind": { "enum": ["full", "partial"] },
+        "from": { "type": ["string", "null"], "format": "date" },
+        "to": { "type": ["string", "null"], "format": "date" },
+        "account_ids": { "type": ["array", "null"], "items": { "type": "string" } },
+        "category_ids": { "type": ["array", "null"], "items": { "type": "string" } },
+        "tag_ids": { "type": ["array", "null"], "items": { "type": "string" } },
+        "types": { "type": ["array", "null"], "items": { "$ref": "#/$defs/txType" } },
+        "currencies": { "type": ["array", "null"], "items": { "$ref": "#/$defs/currencyCode" } },
+        "text": { "type": ["string", "null"] },
+        "notes_included": { "type": "boolean" },
+        "receipts_included": { "type": "boolean", "default": false }
+      }
+    },
+    "settings": {
+      "type": "object", "additionalProperties": false, "required": ["language", "default_currency", "default_account_id", "ai_parsing_enabled"],
+      "properties": {
+        "language": { "enum": ["ru", "en"] },
+        "default_currency": { "anyOf": [{ "$ref": "#/$defs/currencyCode" }, { "type": "null" }] },
+        "default_account_id": { "type": ["string", "null"] },
+        "ai_parsing_enabled": { "type": "boolean" }
+      }
+    },
+    "currencies": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["code", "exponent"],
+        "properties": {
+          "code": { "$ref": "#/$defs/currencyCode" },
+          "exponent": { "type": "integer", "minimum": 0, "maximum": 3 },
+          "symbol": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "accounts": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "name", "kind", "currency", "opening_balance", "archived", "sort", "created_at", "updated_at"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "name": { "type": "string", "minLength": 1 },
+          "kind": { "enum": ["cash", "card", "bank", "savings", "other"] },
+          "currency": { "$ref": "#/$defs/currencyCode" },
+          "opening_balance": { "anyOf": [{ "$ref": "#/$defs/amount" }, { "type": "null" }] },
+          "archived": { "type": "boolean" },
+          "sort": { "type": "integer" },
+          "created_at": { "$ref": "#/$defs/instant" },
+          "updated_at": { "$ref": "#/$defs/instant" }
+        }
+      }
+    },
+    "categories": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "name", "kind", "parent_id", "keywords", "archived", "sort", "created_at", "updated_at"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "name": { "type": "string", "minLength": 1 },
+          "kind": { "enum": ["expense", "income"] },
+          "parent_id": { "type": ["string", "null"] },
+          "keywords": { "type": "array", "items": { "type": "string", "minLength": 1, "pattern": "^[^\\r\\n]*$" } },
+          "archived": { "type": "boolean" },
+          "sort": { "type": "integer" },
+          "created_at": { "$ref": "#/$defs/instant" },
+          "updated_at": { "$ref": "#/$defs/instant" }
+        }
+      }
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "name", "archived", "created_at", "updated_at"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "name": { "type": "string", "minLength": 1 },
+          "archived": { "type": "boolean" },
+          "created_at": { "$ref": "#/$defs/instant" },
+          "updated_at": { "$ref": "#/$defs/instant" }
+        }
+      }
+    },
+    "receipts": {
+      "type": "array",
+      "description": "Version 2: metadata of locally compressed JPEG photos. Image bytes live at path inside a full backup ZIP.",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "transaction_id", "path", "mime_type", "bytes", "sha256", "width", "height", "created_at", "sort"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$" },
+          "transaction_id": { "$ref": "#/$defs/id" },
+          "path": { "type": "string", "pattern": "^receipts/[a-f0-9-]{36}\\.jpg$" },
+          "mime_type": { "const": "image/jpeg" },
+          "bytes": { "type": "integer", "minimum": 1, "maximum": 1500000 },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "width": { "type": "integer", "minimum": 1, "maximum": 8192 },
+          "height": { "type": "integer", "minimum": 1, "maximum": 8192 },
+          "created_at": { "$ref": "#/$defs/instant" },
+          "sort": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "transactions": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "type", "date", "time", "time_zone", "amount", "currency", "account_id", "account_amount", "to_account_id", "to_amount", "category_id", "description", "payee", "note", "tag_ids", "refund_of", "origin", "input_text", "created_at", "updated_at"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "type": { "$ref": "#/$defs/txType" },
+          "date": { "type": "string", "format": "date", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+          "time": { "type": ["string", "null"], "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$" },
+          "time_zone": { "type": ["string", "null"] },
+          "amount": { "$ref": "#/$defs/amount" },
+          "currency": { "$ref": "#/$defs/currencyCode" },
+          "account_id": { "$ref": "#/$defs/id" },
+          "account_amount": { "anyOf": [{ "$ref": "#/$defs/amount" }, { "type": "null" }] },
+          "to_account_id": { "type": ["string", "null"] },
+          "to_amount": { "anyOf": [{ "$ref": "#/$defs/amount" }, { "type": "null" }] },
+          "category_id": { "type": ["string", "null"] },
+          "description": { "type": ["string", "null"] },
+          "payee": { "type": ["string", "null"] },
+          "note": { "type": ["string", "null"] },
+          "tag_ids": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+          "refund_of": { "type": ["string", "null"] },
+          "origin": { "enum": ["line", "form", "ai", "repeat", "reconcile"] },
+          "input_text": { "type": ["string", "null"] },
+          "created_at": { "$ref": "#/$defs/instant" },
+          "updated_at": { "$ref": "#/$defs/instant" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1 },
+    "currencyCode": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "amount": { "type": "string", "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$", "description": "Decimal with exactly the currency's number of decimals." },
+    "instant": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$" },
+    "txType": { "enum": ["expense", "income", "transfer", "refund", "adjustment"] }
+  }
+}

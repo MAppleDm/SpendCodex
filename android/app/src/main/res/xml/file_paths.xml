@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Export sharing, camera output and downloaded updates only; never the database or stored receipt collection. -->
+<paths>
+    <cache-path name="shared" path="shared/" />
+    <cache-path name="camera" path="camera/" />
+    <external-files-path name="updates" path="updates/" />
+</paths>
