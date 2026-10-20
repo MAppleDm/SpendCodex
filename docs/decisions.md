@@ -68,7 +68,9 @@ AI-first expense capture (0.3), with readable receipt photos, manual export/rest
 ## Looks
 
 - Two palettes, both following the phone's light/dark mode: **black & white** (the FatCodex look, the default) and
-  **avocado** (pale flesh by day, dark skin at night, the stone's brown for times, its green for actions and chosen items).
+  **avocado**, adapted from published themes rather than invented: the light variant from the "Avocado" KDE Plasma colour
+  scheme (a light cream of avocado flesh for the page, stone-brown text and times, skin-green actions), the dark one from the "Avocado" Omarchy theme
+  (true black, light yellow-green text, bright green actions, warm yellow times). Sources and values: [licenses.md](licenses.md).
 - Every colour is a token in `core-ui/Theme.kt`; `accent`/`onAccent` colour the send button, chosen chips, text actions and
   question bars. In black & white the accent equals the text colour, so that look is unchanged.
 - The choice is a property of the phone (`theme` in the `app` preferences), like the lock: not part of the journal, not in

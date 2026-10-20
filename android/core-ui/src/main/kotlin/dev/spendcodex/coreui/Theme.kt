@@ -49,7 +49,7 @@ enum class Palette(val code: String) {
     /** Black and white, as in the family's food diary. */
     Mono("mono"),
 
-    /** Avocado: the pale flesh by day, the dark skin at night, the brown of the stone for time, its green for what is chosen. */
+    /** Avocado, adapted from the published "Avocado" themes for KDE Plasma (light) and Omarchy (dark). */
     Avocado("avocado");
 
     companion object {
@@ -90,37 +90,49 @@ val DarkColors = AppColors(
     isDark = true,
 )
 
-/** Avocado by day: the pale yellow-green of the flesh, text in the dark green of the skin, the stone's brown for time. */
+/*
+ * Avocado is not invented here: it adapts two published themes of that name (see docs/licenses.md).
+ * Colours of the originals are kept where they read well on this page; where they do not (green or red text on the
+ * yellow flesh), the same hue is darkened until it reaches 4.5:1. PaletteTest checks every pair.
+ */
+
+/**
+ * Avocado by day, after the "Avocado" colour scheme for KDE Plasma (Sandrone69), on a light cream of avocado flesh: the
+ * scheme's flesh #DDD48F draws the lines, the stone #4B4035 the text and #704012 the time, the skin #4A7337 what is chosen.
+ */
 val AvocadoLightColors = AppColors(
-    background = Color(0xFFF2F5E1),
-    foreground = Color(0xFF1E2914),
-    secondary = Color(0xFF55663F),
-    tertiary = Color(0xFF8C9A72),
-    border = Color(0xFFD9E1BF),
-    pressed = Color(0xFFE2E9C8),
-    error = Color(0xFFB3261E),
-    confirm = Color(0xFF3B6E22),
-    income = Color(0xFF2E6A1C),
-    time = Color(0xFF985423),
-    accent = Color(0xFF4F7A1F),
-    onAccent = Color(0xFFF7FAEA),
+    background = Color(0xFFF3F1D6), // a light cream of the flesh, lighter than the scheme's #DDD48F
+    foreground = Color(0xFF4B4035), // View: ForegroundNormal
+    secondary = Color(0xFF5F5242), // ForegroundNormal lightened; the scheme's grey #7F8C8D is too faint here
+    tertiary = Color(0xFF8C7F62),
+    border = Color(0xFFDDD48F), // View: BackgroundNormal, the flesh
+    pressed = Color(0xFFE8E3B5),
+    error = Color(0xFF9C2A35), // ForegroundNegative #DA4453, darkened
+    confirm = Color(0xFF2F5F1F),
+    income = Color(0xFF2F5F1F), // ForegroundPositive's green, darkened
+    time = Color(0xFF704012), // WM: inactiveBackground, the stone
+    accent = Color(0xFF4A7337), // DecorationFocus, the skin
+    onAccent = Color(0xFFFCFCFC), // Selection: ForegroundActive
     isDark = false,
 )
 
-/** Avocado at night: the near-black green of the skin, text in the colour of the flesh, the bright green of a ripe one. */
+/**
+ * Avocado at night, after the "Avocado" theme for Omarchy/Hyprland (evanklem): true black, the light yellow-green #F2FFBE
+ * for text, the bright green #B5E631 for what is chosen, the muted green #99A91D, the warm yellow #EAA621 for time.
+ */
 val AvocadoDarkColors = AppColors(
-    background = Color(0xFF10160A),
-    foreground = Color(0xFFEBF1D0),
-    secondary = Color(0xFFA5B389),
-    tertiary = Color(0xFF6B7756),
-    border = Color(0xFF263019),
-    pressed = Color(0xFF263019),
-    error = Color(0xFFFF8A80),
-    confirm = Color(0xFFA6D46B),
-    income = Color(0xFFC5E48A),
-    time = Color(0xFFE0A86A),
-    accent = Color(0xFFA4C639),
-    onAccent = Color(0xFF10160A),
+    background = Color(0xFF000000), // Background
+    foreground = Color(0xFFF2FFBE), // Foreground
+    secondary = Color(0xFF99A91D), // Secondary (dim foreground)
+    tertiary = Color(0xFF5F6912),
+    border = Color(0xFF1F2410),
+    pressed = Color(0xFF160000), // Secondary background, the deep red-black
+    error = Color(0xFFE6654F), // Error
+    confirm = Color(0xFF3EAE0A), // Success
+    income = Color(0xFF3EAE0A), // Success
+    time = Color(0xFFEAA621), // Warning, the warm yellow
+    accent = Color(0xFFB5E631), // Primary
+    onAccent = Color(0xFF000000),
     isDark = true,
 )
 

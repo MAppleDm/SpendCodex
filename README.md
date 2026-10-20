@@ -61,7 +61,7 @@ Under **Settings → Data**:
   photo metadata; image bytes are included only in full copies.
 
 The format is documented in [docs/export/format.md](docs/export/format.md). RU/EN, biometric/PIN lock and GitHub updates
-are included, and two looks under **Settings → Theme**: black & white or avocado 🥑, both following the phone's light/dark mode.
+are included, and two looks under **Settings → Theme**: black & white or avocado 🥑 (adapted from the Avocado themes for KDE Plasma and Omarchy), both following the phone's light/dark mode.
 
 ## Build
 
