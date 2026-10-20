@@ -5,19 +5,17 @@ import dev.spendcodex.data.domain.CategoryKind
 import dev.spendcodex.data.settings.Language
 
 /**
- * What a new journal starts with: a short list of ordinary categories and two accounts, named in the language chosen at the
- * first start. Every one of them can be renamed, archived or deleted while unused. The keywords are the words the quick line
- * knows each category by; both languages are always there, so "coffee" works in a Russian journal too.
+ * What a new journal starts with: a short list of ordinary categories, named in the language chosen at the first start, and
+ * the one account every record is booked to. The journal counts spending, not money on cards or in cash, so the account is
+ * never shown; it is there because the stored format has one per record. The keywords are the words the quick line knows
+ * each category by; both languages are always there, so "coffee" works in a Russian journal too.
  */
 internal object Starter {
     class StarterCategory(val ru: String, val en: String, val kind: CategoryKind, val keywords: List<String>)
 
     class StarterAccount(val ru: String, val en: String, val kind: AccountKind)
 
-    val accounts = listOf(
-        StarterAccount("Карта", "Card", AccountKind.Card),
-        StarterAccount("Наличные", "Cash", AccountKind.Cash),
-    )
+    val accounts = listOf(StarterAccount("Расходы", "Spending", AccountKind.Other))
 
     val categories = listOf(
         StarterCategory("Продукты", "Groceries", CategoryKind.Expense, words(

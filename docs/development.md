@@ -32,7 +32,7 @@ JVM only (Robolectric with real SQLite), no emulator needed. What they cover:
 |---|---|
 | `MoneyTest` | exact decimals, currency exponents, refusal instead of rounding, formats |
 | `QuickLineTest` | the line grammar in Russian and English: amounts, currencies, dates, accounts, transfers, refunds, tags, notes, splitting, ambiguities |
-| `LedgerTest` | records on the real database: defaults, balances, multi-currency, transfers, idempotent save, edit without change, delete + undo, tags, archiving, foreign keys, search and combined filters, order of same-minute records, repeat, refund, reconcile, seed, reopening the database |
+| `LedgerTest` | records on the real database: defaults, balances, multi-currency, transfers, idempotent save, edit without change, delete + undo, tags, archiving, foreign keys, search and combined filters (account names not searched), order of same-minute records, repeat, refund, reconcile, seed with one hidden account, a record always finding an account, reopening the database |
 | `BackupTest` | export → restore → export is identical; bare JSON; archive layout and checksums; exact amount strings; CSV quoting and formula guard; the AI package; damaged, foreign, newer, partial and inconsistent files refused with nothing changed; 50 000 operations |
 | `ReceiptTest` | real JPEG compression and all EXIF orientations; originals; atomic save/delete/undo; duplicates and limits; exact photo round-trips and safety copies; missing/damaged/oversized/unsafe archives; staging-loss rollback; v1 JSON/ZIP compatibility |
 | `ReceiptFlowTest` | gallery and camera output, duplicate selection, viewer, removal/undo, pending changes and abandonment; optional screenshots via `-Pscreenshots=../docs/screenshots` |

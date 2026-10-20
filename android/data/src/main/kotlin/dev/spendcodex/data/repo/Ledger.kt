@@ -140,12 +140,33 @@ class Ledger @Inject constructor(
     suspend fun categoriesNow(): List<Category> = dao.categoriesNow().map { it.toDomain() }
     suspend fun tagsNow(): List<Tag> = dao.tagsNow().map { it.toDomain() }
 
-    /** The account a record goes to when none is named: the chosen default if it is still active, else the first active one. */
-    suspend fun defaultAccountId(): String? {
-        val active = dao.accountsNow().filter { !it.archived }
+    /**
+     * The account a record goes to when none is named: the chosen default if it is still active, else the first active one.
+     * Payment methods are not shown (the journal counts spending, not balances), so nobody could fix a journal without an
+     * active account: the default one is brought back from the archive, or, in a journal with none, the starter one is made.
+     */
+    suspend fun defaultAccountId(): String = db.withTransaction {
+        val all = dao.accountsNow()
         val chosen = settings.choices.value.defaultAccountId
-        return active.firstOrNull { it.id == chosen }?.id ?: active.firstOrNull()?.id
+        val active = all.filter { !it.archived }
+        active.firstOrNull { it.id == chosen }?.id ?: active.firstOrNull()?.id ?: run {
+            val nowMs = now().toInstant().toEpochMilli()
+            val archived = all.firstOrNull { it.id == chosen } ?: all.firstOrNull()
+            if (archived != null) {
+                dao.upsertAccount(archived.copy(archived = false, updatedAt = nowMs))
+                archived.id
+            } else {
+                val a = Starter.accounts.first()
+                val code = settings.choices.value.defaultCurrency?.let(Currencies::of)?.code ?: "EUR"
+                val account = Account(UUID.randomUUID().toString(), Starter.name(a.ru, a.en, settings.choices.value.language), a.kind, code, null, nowMs, nowMs)
+                dao.upsertAccount(account.toEntity())
+                account.id
+            }
+        }
     }
+
+    /** [id] when that account can still take new records, else null (the default one). */
+    private suspend fun activeAccount(id: String): String? = dao.account(id)?.takeIf { !it.archived }?.id
 
     /**
      * What the quick line reads against. Its [LineContext.hint] asks the database while the line is read, so the line must
@@ -290,12 +311,14 @@ class Ledger @Inject constructor(
     /** The same operation again, now: a new record with what the old one said, except when and its link to a purchase. */
     suspend fun repeat(id: String): SaveResult? {
         val tx = get(id) ?: return null
+        // an old record's payment method may be archived by now; nobody can see or choose it, so the default one takes it
+        val accountId = activeAccount(tx.accountId)
         val draft = Draft(
             type = tx.type,
             amount = Currencies.of(tx.currency)?.let { Decimal.format(tx.amountMinor, it.exponent) }.orEmpty(),
             currency = tx.currency,
-            accountId = tx.accountId,
-            accountAmount = tx.accountAmountMinor?.let { m ->
+            accountId = accountId,
+            accountAmount = tx.accountAmountMinor?.takeIf { accountId != null }?.let { m ->
                 dao.account(tx.accountId)?.currency?.let(Currencies::of)?.let { Decimal.format(m, it.exponent) }
             }.orEmpty(),
             toAccountId = tx.toAccountId,
@@ -314,7 +337,7 @@ class Ledger @Inject constructor(
         return save(draft)
     }
 
-    /** A refund of this purchase, to be checked and sent: the same amount, account and category, linked to it. */
+    /** A refund of this purchase, to be checked and sent: the same amount and category, linked to it. */
     suspend fun refundDraft(id: String): Draft? {
         val tx = get(id) ?: return null
         if (tx.type != TxType.Expense) return null
@@ -322,7 +345,7 @@ class Ledger @Inject constructor(
             type = TxType.Refund,
             amount = Currencies.of(tx.currency)?.let { Decimal.format(tx.amountMinor, it.exponent) }.orEmpty(),
             currency = tx.currency,
-            accountId = tx.accountId,
+            accountId = activeAccount(tx.accountId),
             categoryId = tx.categoryId,
             payee = tx.payee.orEmpty(),
             description = tx.description.orEmpty(),
@@ -463,8 +486,8 @@ class Ledger @Inject constructor(
     // ---------- the journal as a whole ----------
 
     /**
-     * A new journal: the starter categories and accounts in [language], in [currency]. Only into an empty journal; a journal
-     * that already has accounts is left as it is.
+     * A new journal: the starter categories and the one account in [language], in [currency]. Only into an empty journal; a
+     * journal that already has accounts is left as it is.
      */
     suspend fun seed(language: Language, currency: String) {
         val code = Currencies.require(currency).code

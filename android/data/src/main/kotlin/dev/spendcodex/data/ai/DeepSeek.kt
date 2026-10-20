@@ -1,6 +1,5 @@
 package dev.spendcodex.data.ai
 
-import dev.spendcodex.data.domain.Account
 import dev.spendcodex.data.domain.Category
 import dev.spendcodex.data.domain.CategoryKind
 import dev.spendcodex.data.domain.Currencies
@@ -35,12 +34,14 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 
-/** What DeepSeek is told besides the line: the journal's names and today. Never amounts, balances or past records. */
+/**
+ * What DeepSeek is told besides the line: the journal's categories and tags, and today. Never amounts, past records or
+ * payment methods: the journal counts spending, not what is left on a card or in cash.
+ */
 data class AiContext(
     val today: LocalDate,
     val timeZone: String,
     val english: Boolean,
-    val accounts: List<Account>,
     val categories: List<Category>,
     val defaultCurrency: String?,
     val tags: List<String> = emptyList(),
@@ -48,7 +49,7 @@ data class AiContext(
 
 /** One operation DeepSeek read. [amountInText]: its amount is a number that is in the line itself, not one the model made up. */
 enum class AiIssue { Currency, Date, Time, Tags }
-data class AiDraft(val draft: Draft, val amountInText: Boolean, val unknownAccount: String?, val unknownCategory: String?, val issues: List<AiIssue> = emptyList())
+data class AiDraft(val draft: Draft, val amountInText: Boolean, val unknownCategory: String?, val issues: List<AiIssue> = emptyList())
 
 /** Why DeepSeek could not help. The line stays in the input for another try. */
 sealed class AiFailure(val detail: String, val retryable: Boolean) : Exception(detail) {
@@ -109,9 +110,6 @@ class AiReader(
         put("time_zone", ctx.timeZone)
         put("language", if (ctx.english) "en" else "ru")
         ctx.defaultCurrency?.let { put("default_currency", it) }
-        putJsonArray("accounts") {
-            ctx.accounts.filter { !it.archived }.forEach { a -> add(buildJsonObject { put("name", a.name); put("currency", a.currency) }) }
-        }
         putJsonArray("categories") {
             ctx.categories.filter { !it.archived && it.kind == CategoryKind.Expense }.forEach { c ->
                 add(buildJsonObject {
@@ -137,12 +135,6 @@ class AiReader(
         if (typeName != "expense") throw AiFailure.Input("unsupported")
         val type = TxType.Expense
         val amount = s("amount")?.removePrefix("+") ?: throw AiFailure.BadOutput("expense without amount")
-        val active = ctx.accounts.filter { !it.archived }
-        fun account(name: String?): Account? = name?.let { n ->
-            active.firstOrNull { normalize(it.name) == normalize(n) } ?: active.singleOrNull { a -> QuickLine.wordMatches(normalize(n), normalize(a.name)) }
-        }
-        val accountName = s("account")
-        val account = account(accountName)
         val categoryName = s("category")
         val wantedKind = type.categoryKind
         val category = categoryName?.let { n ->
@@ -168,7 +160,6 @@ class AiReader(
             type = type,
             amount = amount,
             currency = currency,
-            accountId = account?.id,
             categoryId = category?.id,
             description = s("description").orEmpty(),
             payee = s("payee").orEmpty(),
@@ -186,7 +177,6 @@ class AiReader(
         return AiDraft(
             draft = draft,
             amountInText = numberInText(amount, text),
-            unknownAccount = accountName?.takeIf { account == null },
             unknownCategory = categoryName?.takeIf { category == null },
             issues = issues,
         )
@@ -285,7 +275,7 @@ class AiReader(
             - amount: the number exactly as written for that operation, as a string. If the note gives one total for several
               things, that is one operation. Preserve all expenses in the note, up to 50. Never silently omit an item.
             - currency: an ISO 4217 code only if the note names a currency; otherwise null.
-            - account: a name from context.accounts only if the note clearly refers to a payment method; otherwise null.
+            - How it was paid (card, cash, a bank) is not recorded and never makes an expense unclear; leave it out.
             - category: choose the best matching name from context.categories (including the full parent › child path).
               Use the provided keywords as hints. Do not invent category names; use null if none fits.
             - description: a few words of what it was, in the note's language. payee: who was paid or paid, if named.
@@ -313,7 +303,7 @@ class AiReader(
                                 putJsonObject("properties") {
                                     putJsonObject("type") { put("type", "string"); putJsonArray("enum") { add("expense") } }
                                     putJsonObject("amount") { put("type", "string") }
-                                    nullable("currency"); nullable("account")
+                                    nullable("currency")
                                     nullable("category"); putJsonObject("description") { put("type", "string") }; nullable("payee")
                                     nullable("date"); nullable("time"); nullable("note")
                                     putJsonObject("tags") { put("type", "array"); putJsonObject("items") { put("type", "string") } }

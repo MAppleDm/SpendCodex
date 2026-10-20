@@ -92,7 +92,7 @@ fun JournalScreen(
                     items(items, key = { it.key }) { item ->
                         val animate = Modifier.animateItem(fadeInSpec = tween(120), placementSpec = tween(120), fadeOutSpec = null)
                         when (item) {
-                            is FeedItem.Op -> OperationRow(item.row, false, onClick = { onOpen(item.row.id) }, modifier = animate)
+                            is FeedItem.Op -> OperationRow(item.row, onClick = { onOpen(item.row.id) }, modifier = animate)
                             is FeedItem.Day -> DateRow(Format.dayTitle(item.date, state.today), animate)
                         }
                     }

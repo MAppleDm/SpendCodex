@@ -26,7 +26,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 
-enum class SearchField { Period, Types, Accounts, Categories, Tags, Currencies }
+enum class SearchField { Period, Types, Categories, Tags, Currencies }
 
 enum class Period { All, ThisMonth, LastMonth, ThisYear, Last12, Custom }
 
@@ -68,7 +68,7 @@ class SearchViewModel @Inject constructor(private val ledger: Ledger, private va
             totals = if (ready) m.totals else emptyList(), names = n, today = LocalDate.now(clock))
     }.stateIn(viewModelScope, SharingStarted.Eagerly, SearchUiState())
 
-    /** Opens the page with [start] (empty, or an account from the journal's balances); a rotation keeps what was set. */
+    /** Opens the page with [start]; a rotation keeps what was set. */
     fun open(key: String, start: Filter) {
         if (openedFor == key) return
         openedFor = key
@@ -106,7 +106,6 @@ class SearchViewModel @Inject constructor(private val ledger: Ledger, private va
     }
 
     fun onType(type: TxType) = setFilter { it.copy(types = it.types.toggle(type)) }
-    fun onAccount(id: String) = setFilter { it.copy(accountIds = it.accountIds.toggle(id)) }
     fun onCategory(id: String) = setFilter { it.copy(categoryIds = it.categoryIds.toggle(id)) }
     fun onTag(id: String) = setFilter { it.copy(tagIds = it.tagIds.toggle(id)) }
     fun onCurrency(code: String) = setFilter { it.copy(currencies = it.currencies.toggle(code)) }

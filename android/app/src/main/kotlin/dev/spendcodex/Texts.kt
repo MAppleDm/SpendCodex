@@ -31,7 +31,6 @@ object Texts {
     val BALANCES get() = t("Остатки", "Balances")
     val BALANCE_NO_OPENING get() = t("без начального остатка", "no opening balance")
     fun balanceIncomplete(n: Int) = t("не учтено: $n в другой валюте", "not counted: $n in another currency")
-    val NO_ACCOUNTS get() = t("Нет счетов. Добавь счёт в настройках.", "No accounts. Add one in settings.")
     val CD_SEARCH get() = t("Поиск", "Search")
     val CD_SETTINGS get() = t("Настройки", "Settings")
     val MANUAL_ENTRY get() = t("Добавить вручную", "Add manually")
@@ -69,7 +68,6 @@ object Texts {
     val AI_BAD_DATE get() = t("DeepSeek вернул некорректную или будущую дату. Уточни её.", "DeepSeek returned an invalid or future date. Clarify it.")
     val AI_BAD_TIME get() = t("DeepSeek вернул некорректное время. Уточни его.", "DeepSeek returned an invalid time. Clarify it.")
     val AI_BAD_TAGS get() = t("DeepSeek вернул некорректные теги. Исправь запись или повтори разбор.", "DeepSeek returned invalid tags. Edit the record or try again.")
-    fun aiUnknownAccount(name: String) = t("счёта «$name» нет: взят основной", "no account “$name”: the default is used")
     fun aiUnknownCategory(name: String) = t("категории «$name» нет", "no category “$name”")
     fun aiFailed(detail: String) = t("DeepSeek не помог: $detail", "DeepSeek could not help: $detail")
     val AI_NO_KEY get() = t("Нет ключа DeepSeek: добавь его в настройках.", "No DeepSeek key: add it in settings.")
@@ -112,12 +110,9 @@ object Texts {
     val CANCEL get() = t("отмена", "cancel")
     val AMOUNT get() = t("Сумма", "Amount")
     val CURRENCY get() = t("Валюта", "Currency")
-    val ACCOUNT get() = t("Способ оплаты", "Payment method")
+    /** Only old transfers and adjustments, from before 0.3, show an account; nothing else has a payment method. */
+    val ACCOUNT get() = t("Счёт", "Account")
     val TO_ACCOUNT get() = t("Куда", "To")
-    fun accountAmount(code: String) = t("Списано со счёта, $code", "Taken from the account, $code")
-    fun accountAmountIncome(code: String) = t("Зачислено на счёт, $code", "Added to the account, $code")
-    val ACCOUNT_AMOUNT_HINT get() = t("Необязательно. Без этого остаток счёта будет помечен как неполный: курс не угадывается.",
-        "Optional. Without it the account's balance is marked incomplete: no rate is guessed.")
     fun toAmount(code: String) = t("Пришло, $code", "Arrived, $code")
     val CATEGORY get() = t("Категория", "Category")
     val DATE get() = t("Дата", "Date")
@@ -181,18 +176,17 @@ object Texts {
     }
 
     // ---------- search ----------
-    val SEARCH_PLACEHOLDER get() = t("Поиск: слово, сумма, счёт, тег", "Search: a word, an amount, an account, a tag")
+    val SEARCH_PLACEHOLDER get() = t("Поиск: слово, сумма, категория, тег", "Search: a word, an amount, a category, a tag")
     val PERIOD get() = t("Период", "Period")
     val TYPES get() = t("Тип", "Type")
     val LEGACY_TYPES get() = t("Ранее записанные операции", "Previously recorded operations")
-    val ACCOUNTS get() = t("Способы оплаты", "Payment methods")
     val CATEGORIES get() = t("Категории", "Categories")
     val CURRENCIES get() = t("Валюта", "Currency")
     val RESET get() = t("сбросить", "reset")
     val EXPORT_FOUND get() = t("выгрузить", "export")
     val NOTHING_FOUND get() = t("Ничего не найдено.", "Nothing found.")
-    val SEARCH_HINT get() = t("Ищет в описании, получателе, заметке, сумме, а также в названиях счёта, категории и тегов.",
-        "Looks in the description, payee, note, amount, and the names of account, category and tags.")
+    val SEARCH_HINT get() = t("Ищет в описании, получателе, заметке, сумме, а также в названиях категории и тегов.",
+        "Looks in the description, payee, note, amount, and the names of category and tags.")
     fun found(n: Int) = t("$n ${plural(n, "операция", "операции", "операций")}", "$n ${if (n == 1) "operation" else "operations"}")
     val SPENT get() = t("расходы", "spent")
     val EARNED get() = t("доходы", "earned")
@@ -206,27 +200,10 @@ object Texts {
     val FROM get() = t("с", "from")
     val TO get() = t("по", "to")
     val DATE_HINT get() = t("ДД.ММ.ГГГГ", "DD.MM.YYYY")
-    val ANY get() = t("все", "all")
-    fun selected(n: Int) = t("выбрано: $n", "$n selected")
 
-    // ---------- accounts ----------
-    val ADD_ACCOUNT get() = t("+ добавить", "+ add")
-    val NEW_ACCOUNT get() = t("Способ оплаты", "Payment method")
+    // ---------- lists ----------
     val NAME get() = t("Название", "Name")
     val KIND get() = t("Вид", "Kind")
-    val OPENING get() = t("Начальный остаток", "Opening balance")
-    val OPENING_HINT get() = t("Сколько было на счёте, когда начался учёт. Пусто: не задан, тогда остаток показывает только движение.",
-        "What was there when the journal started. Empty: not set, then the balance is only the movement since.")
-    val CURRENCY_LOCKED get() = t("Валюту нельзя сменить: у счёта есть операции.", "The currency cannot change: the account has operations.")
-    val DEFAULT_ACCOUNT get() = t("Оплата по умолчанию", "Default payment method")
-    val MAKE_DEFAULT get() = t("сделать основным", "make default")
-    val IS_DEFAULT get() = t("основной", "default")
-    val RECONCILE get() = t("Сверить остаток", "Check the balance")
-    val RECONCILE_HINT get() = t("Введи, сколько на счёте на самом деле: разница запишется корректировкой.", "Enter what the account really holds: the difference is recorded as an adjustment.")
-    val RECONCILE_DO get() = t("сверить", "check")
-    val RECONCILE_SAME get() = t("Остаток совпадает.", "The balance matches.")
-    fun reconciled(delta: String) = t("Записана корректировка $delta", "Recorded an adjustment of $delta")
-    fun nowBalance(v: String) = t("По журналу: $v", "In the journal: $v")
     val ARCHIVE get() = t("в архив", "archive")
     val UNARCHIVE get() = t("вернуть из архива", "unarchive")
     val ARCHIVED get() = t("Архив", "Archived")
@@ -254,7 +231,7 @@ object Texts {
         EditError.NameMissing -> t("Нужно название.", "A name is needed.")
         EditError.NameTaken -> t("Такое название уже есть.", "This name is taken.")
         EditError.CurrencyUnknown -> t("Неизвестная валюта.", "Unknown currency.")
-        EditError.CurrencyLocked -> CURRENCY_LOCKED
+        EditError.CurrencyLocked -> t("Валюту нельзя сменить: есть операции.", "The currency cannot change: there are operations.")
         EditError.AmountInvalid -> t("Сумма не читается.", "The amount cannot be read.")
         EditError.ParentInvalid -> t("Так вложить нельзя: один уровень и тот же вид.", "Cannot nest like that: one level, same kind.")
         EditError.KindLocked -> KIND_LOCKED
@@ -286,17 +263,17 @@ object Texts {
         "Receipt images are included only in a full backup. Analysis exports contain attachment metadata without the images.")
     val BACKUP get() = t("Резервная копия", "Backup")
     val BACKUP_HINT get() = t(
-        "Полная копия журнала: счета, категории, теги, операции, фото чеков и настройки, с описанием формата. Из неё восстанавливается всё, на этом или другом телефоне.",
-        "A full copy of the journal: accounts, categories, tags, operations, receipt photos and settings, with the format described. Everything can be restored from it, on this phone or another.",
+        "Полная копия журнала: операции, категории, теги, фото чеков и настройки, с описанием формата. Из неё восстанавливается всё, на этом или другом телефоне.",
+        "A full copy of the journal: operations, categories, tags, receipt photos and settings, with the format described. Everything can be restored from it, on this phone or another.",
     )
     fun lastBackup(at: String?) = if (at == null) t("Копия ещё не сохранялась.", "No backup saved yet.") else t("Последняя копия: $at", "Last backup: $at")
     val BACKUP_SAVE get() = t("Сохранить копию", "Save a backup")
     val BACKUP_SHARE get() = t("Отправить копию", "Send a backup")
     val RESTORE get() = t("Восстановить из копии", "Restore from a backup")
     val RESTORE_READING get() = t("Читаю и проверяю копию…", "Reading and checking the backup…")
-    fun restoreSummary(date: String, version: String, accounts: Int, categories: Int, tags: Int, ops: Int, range: String?) = t(
-        "Копия от $date (SpendCodex $version): счетов $accounts, категорий $categories, тегов $tags, операций $ops" + (range?.let { ", $it" } ?: "") + ".",
-        "Backup of $date (SpendCodex $version): $accounts accounts, $categories categories, $tags tags, $ops operations" + (range?.let { ", $it" } ?: "") + ".",
+    fun restoreSummary(date: String, version: String, categories: Int, tags: Int, ops: Int, range: String?) = t(
+        "Копия от $date (SpendCodex $version): категорий $categories, тегов $tags, операций $ops" + (range?.let { ", $it" } ?: "") + ".",
+        "Backup of $date (SpendCodex $version): $categories categories, $tags tags, $ops operations" + (range?.let { ", $it" } ?: "") + ".",
     )
     fun restoreReplaces(n: Int) = t(
         "Сейчас в журнале операций: $n. Всё будет заменено содержимым копии. Текущие данные сначала сохранятся в страховочную копию на телефоне.",
@@ -316,9 +293,9 @@ object Texts {
     val NOTES get() = t("Заметки и набранный текст", "Notes and typed text")
     val INCLUDED get() = t("включать", "include")
     val EXCLUDED get() = t("не включать", "leave out")
-    fun exportPreview(n: Int, range: String?, accounts: String, notes: Boolean) = t(
-        "Будет выгружено: операций $n" + (range?.let { ", $it" } ?: "") + "; счета: $accounts; заметки: ${if (notes) "да" else "нет"}. Ключ DeepSeek и настройка защиты не выгружаются никогда.",
-        "To be exported: $n operations" + (range?.let { ", $it" } ?: "") + "; accounts: $accounts; notes: ${if (notes) "yes" else "no"}. The DeepSeek key and the lock setting are never exported.",
+    fun exportPreview(n: Int, range: String?, notes: Boolean) = t(
+        "Будет выгружено: операций $n" + (range?.let { ", $it" } ?: "") + "; заметки: ${if (notes) "да" else "нет"}. Ключ DeepSeek и настройка защиты не выгружаются никогда.",
+        "To be exported: $n operations" + (range?.let { ", $it" } ?: "") + "; notes: ${if (notes) "yes" else "no"}. The DeepSeek key and the lock setting are never exported.",
     )
     val FROM_SEARCH get() = t("По поиску", "From the search")
     fun kindTitle(kind: dev.spendcodex.data.backup.ExportKind) = when (kind) {
@@ -399,10 +376,10 @@ object Texts {
     val AI_EXPLAIN get() = t(
         "Нажатие на стрелку отправляет твой текст в DeepSeek с твоим ключом. Модель выделяет расходы, выбирает категории и добавляет теги. " +
             "После проверки записи сохраняются сразу; отмена доступна в ленте. Неоднозначный ответ потребует уточнения. " +
-            "Вместе с текстом отправляются текущая дата, часовой пояс, основная валюта, названия способов оплаты, категории с ключевыми словами и названия тегов. История и фото чеков не отправляются. Нужны интернет и средства на API-аккаунте DeepSeek.",
+            "Вместе с текстом отправляются текущая дата, часовой пояс, основная валюта, категории с ключевыми словами и названия тегов. История и фото чеков не отправляются. Нужны интернет и средства на API-аккаунте DeepSeek.",
         "The send arrow submits your text to DeepSeek using your key. The model extracts expenses, chooses categories and adds tags. " +
             "Validated records save immediately, with undo in the journal. Unclear answers need clarification. " +
-            "The request includes today's date, time zone, default currency, payment method names, categories with keywords and tag names. Past records and receipt photos are not sent. Internet and a funded DeepSeek API account are required.",
+            "The request includes today's date, time zone, default currency, categories with keywords and tag names. Past records and receipt photos are not sent. Internet and a funded DeepSeek API account are required.",
     )
     val AI_KEY get() = t("Ключ DeepSeek", "DeepSeek key")
     val AI_GET_KEY get() = t("Получить ключ DeepSeek ↗", "Get a DeepSeek key ↗")

@@ -24,9 +24,6 @@ import dev.spendcodex.Texts
 import dev.spendcodex.coreui.AppTheme
 import dev.spendcodex.data.backup.ExportScope
 import dev.spendcodex.data.domain.Filter
-import dev.spendcodex.ui.accounts.AccountEditScreen
-import dev.spendcodex.ui.accounts.AccountsScreen
-import dev.spendcodex.ui.accounts.AccountsViewModel
 import dev.spendcodex.ui.categories.CategoriesScreen
 import dev.spendcodex.ui.categories.CategoriesViewModel
 import dev.spendcodex.ui.categories.CategoryEditScreen
@@ -62,7 +59,6 @@ class Screens(
     val journal: JournalViewModel,
     val operation: OperationViewModel,
     val search: SearchViewModel,
-    val accounts: AccountsViewModel,
     val categories: CategoriesViewModel,
     val data: DataViewModel,
     val settings: SettingsViewModel,
@@ -102,7 +98,6 @@ private fun Pages(s: Screens) {
             }
         }
     }
-    LaunchedEffect(Unit) { s.accounts.closed.collect { s.nav.back() } }
     LaunchedEffect(Unit) { s.categories.closed.collect { s.nav.back() } }
 
     fun newOperation() {
@@ -152,15 +147,6 @@ private fun Pages(s: Screens) {
                 SearchScreen(state, s.search, onBack = { s.nav.back() },
                     onOpen = { id -> s.nav.push(Screen.Operation(OperationRequest.Edit(id))) },
                     onExport = { f -> s.nav.push(Screen.Data(ExportScope(f))) })
-            }
-            Screen.Accounts -> {
-                val state by s.accounts.state.collectAsStateWithLifecycle()
-                AccountsScreen(state, s.accounts, onBack = { s.nav.back() }, onOpen = { id -> s.nav.push(Screen.AccountEdit(id)) })
-            }
-            is Screen.AccountEdit -> {
-                LaunchedEffect(top.key) { s.accounts.open(top.key, top.id) }
-                val state by s.accounts.state.collectAsStateWithLifecycle()
-                if (state.form.key == top.key) AccountEditScreen(state, s.accounts, onBack = { s.nav.back() })
             }
             Screen.Categories -> {
                 val state by s.categories.state.collectAsStateWithLifecycle()
@@ -220,7 +206,6 @@ private fun SettingsPage(s: Screens) {
         update = update,
         onBack = { s.settings.onDisarm(); s.nav.back() },
         onData = { s.nav.push(Screen.Data()) },
-        onAccounts = { s.nav.push(Screen.Accounts) },
         onCategories = { s.nav.push(Screen.Categories) },
         onAi = { s.nav.push(Screen.Ai) },
         // turning the lock on or off is asked of the person with the same prompt that opens it

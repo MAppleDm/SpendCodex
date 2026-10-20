@@ -147,8 +147,10 @@ Operations at the same date and time keep a stable order: by `created_at`, then 
 
 ### Legacy account balances
 
-Since app version 0.3, SpendCodex captures expenses and does not calculate account balances. Accounts are payment-method
-labels; historical opening amounts and non-expense records are preserved for lossless restoration. The legacy CSV columns
+Since app version 0.3, SpendCodex captures expenses and does not calculate account balances. Since 0.3.2 it has no payment
+methods either: new journals have one account ("Расходы"/"Spending") that the app never shows, and every new record is
+booked to it. Accounts of older journals, historical opening amounts and non-expense records are preserved for lossless
+restoration. Do not read `account_id` as how something was paid. The legacy CSV columns
 `computed_balance` and `computed_balance_complete` are kept empty. The formula below describes older exports only.
 
 Likewise, `settings.ai_parsing_enabled` is retained from older backups for round-trip compatibility. In 0.3 and later,

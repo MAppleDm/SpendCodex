@@ -25,14 +25,14 @@ Stored records support editing, repeating, purchase refunds and deletion with un
 
 ## Expenses only
 
-The header shows today's spending per currency. Card and cash balances are not calculated.
-Payment methods are labels, chosen in the form or recognised when explicitly named in text.
+The header shows today's spending per currency. SpendCodex counts spending, not balances: there are no payment methods,
+no default payment method and no card or cash balances.
 There is no new income, own-account transfer or balance-adjustment entry. Purchase refunds are created from the
 original expense and displayed separately.
 
 Older non-expense records remain intact. Find them under **Search → Type → Previously recorded operations**;
 full manual copies retain them. Default search and the main feed show expenses and refunds.
-Search combines text, dates, payment methods, categories, tags and currencies, and can export its results.
+Search combines text, dates, categories, tags and currencies, and can export its results.
 
 ## Receipts
 
@@ -47,8 +47,8 @@ Repeating a purchase does not duplicate its old receipt.
 - Each batch saves atomically; repeated taps cannot duplicate it.
 - The original note is retained with `origin=ai`. Categories and tags are editable model classifications.
 
-Each send submits **your typed note including its amounts**, today's date, time zone, default currency, payment-method
-names, categories with keywords and existing tag names to DeepSeek. Past records and receipt images are not sent.
+Each send submits **your typed note including its amounts**, today's date, time zone, default currency,
+categories with keywords and existing tag names to DeepSeek. Past records and receipt images are not sent.
 The key is encrypted on the device, used for authentication and excluded from exports. Saved records stay on the
 phone; there is no device sync.
 

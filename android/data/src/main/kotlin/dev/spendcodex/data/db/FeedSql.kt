@@ -63,14 +63,14 @@ object FeedSql {
     internal fun where(f: Filter): Pair<String, List<Any>> {
         val clauses = ArrayList<String>()
         val args = ArrayList<Any>()
-        // every word must be found somewhere: in the record's text, its accounts, its category or a tag
+        // every word must be found somewhere: in the record's text, its category or a tag. Not in its account's name: the
+        // account is not shown, and in an older journal "карта" would find every record paid by card
         normalize(f.text).split(' ').filter { it.isNotEmpty() }.forEach { word ->
             val like = contains(word)
-            clauses += """(t.search_text LIKE ? ESCAPE '\' OR a.name_norm LIKE ? ESCAPE '\' OR ta.name_norm LIKE ? ESCAPE '\'
-                OR c.name_norm LIKE ? ESCAPE '\' OR p.name_norm LIKE ? ESCAPE '\'
+            clauses += """(t.search_text LIKE ? ESCAPE '\' OR c.name_norm LIKE ? ESCAPE '\' OR p.name_norm LIKE ? ESCAPE '\'
                 OR EXISTS (SELECT 1 FROM transaction_tags tt JOIN tags g ON g.id = tt.tag_id
                            WHERE tt.transaction_id = t.id AND g.name_norm LIKE ? ESCAPE '\'))"""
-            repeat(6) { args += like }
+            repeat(4) { args += like }
         }
         f.from?.let { clauses += "t.date >= ?"; args += it.toString() }
         f.to?.let { clauses += "t.date <= ?"; args += it.toString() }

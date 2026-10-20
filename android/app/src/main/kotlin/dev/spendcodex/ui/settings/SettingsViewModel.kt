@@ -6,7 +6,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.spendcodex.coreui.Palette
 import dev.spendcodex.Texts
 import dev.spendcodex.data.backup.DocAssets
-import dev.spendcodex.data.domain.Account
 import dev.spendcodex.data.domain.Currencies
 import dev.spendcodex.data.repo.Ledger
 import dev.spendcodex.data.settings.Choices
@@ -24,7 +23,6 @@ import kotlinx.coroutines.launch
 
 data class SettingsUi(
     val currencyOpen: Boolean = false,
-    val accountOpen: Boolean = false,
     val eraseArmed: Boolean = false,
     val keyDraft: String = "",
     val keyMessage: String? = null,
@@ -38,7 +36,6 @@ data class SettingsUiState(
     val ui: SettingsUi = SettingsUi(),
     val choices: Choices = Choices(Language.Ru, null, null, false),
     val hasKey: Boolean = false,
-    val accounts: List<Account> = emptyList(),
     val setupDone: Boolean = true,
 )
 
@@ -51,8 +48,8 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
     private val ui = MutableStateFlow(SettingsUi())
 
-    val state: StateFlow<SettingsUiState> = combine(ui, settings.choices, secrets.hasKey, ledger.accounts, settings.setupDone) { u, c, k, a, s ->
-        SettingsUiState(u, c, k, a, s)
+    val state: StateFlow<SettingsUiState> = combine(ui, settings.choices, secrets.hasKey, settings.setupDone) { u, c, k, s ->
+        SettingsUiState(u, c, k, s)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, SettingsUiState(setupDone = settings.setupDone.value))
 
     val formatText: String by lazy { runCatching { docs.format }.getOrDefault("") }
@@ -64,16 +61,10 @@ class SettingsViewModel @Inject constructor(
 
     fun onTheme() = settings.setTheme(if (Palette.of(settings.theme.value) == Palette.Avocado) Palette.Mono.code else Palette.Avocado.code)
 
-    fun onToggleCurrency() = ui.update { it.copy(currencyOpen = !it.currencyOpen, accountOpen = false) }
+    fun onToggleCurrency() = ui.update { it.copy(currencyOpen = !it.currencyOpen) }
     fun onCurrency(code: String) {
         settings.setDefaultCurrency(code)
         ui.update { it.copy(currencyOpen = false) }
-    }
-
-    fun onToggleAccount() = ui.update { it.copy(accountOpen = !it.accountOpen, currencyOpen = false) }
-    fun onAccount(id: String) {
-        settings.setDefaultAccount(id)
-        ui.update { it.copy(accountOpen = false) }
     }
 
     // ---------- DeepSeek ----------

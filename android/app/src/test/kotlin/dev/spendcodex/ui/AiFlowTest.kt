@@ -61,7 +61,7 @@ class AiFlowTest {
             val s by vm.state.collectAsState()
             JournalScreen(s, vm, vm.effects, {}, {}, {}, {}, {})
         } }
-        settle { vm.state.value.loaded && vm.state.value.names.active.size == 2 }
+        settle { vm.state.value.loaded && vm.state.value.names.active.size == 1 }
     }
 
     private fun answer(ops: String, status: String = "ok"): MockResponse {

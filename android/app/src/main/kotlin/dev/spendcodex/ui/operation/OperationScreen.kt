@@ -57,8 +57,9 @@ fun OperationScreen(state: OperationUiState, vm: OperationViewModel, onBack: () 
     val t = AppTheme.type
     val c = AppTheme.colors
     val live = remember(state) { vm.livePreview(state) }
-    // what the person tried to save and was told, or what is wrong already (not the empty amount of a fresh form)
-    val shown = (f.problems.ifEmpty { live.filterNot { it == Problem.AmountMissing } })
+    // what the person tried to save and was told, or what is wrong already (not the empty amount of a fresh form, nor a
+    // missing account: the journal gets its one account when the record is stored)
+    val shown = (f.problems.ifEmpty { live.filterNot { it == Problem.AmountMissing || it == Problem.AccountMissing } })
     fun problemsOf(field: Problem.Field) = shown.filter { it.field == field }
     val amountFocus = remember { FocusRequester() }
     LaunchedEffect(f.key, f.loading) {
@@ -97,26 +98,23 @@ fun OperationScreen(state: OperationUiState, vm: OperationViewModel, onBack: () 
             Errors(problemsOf(Problem.Field.Amount) + problemsOf(Problem.Field.Currency))
             if (f.open == FormField.Currency) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(16.dp)) {
-                    (listOfNotNull(account?.currency) + names.active.map { it.currency } + Currencies.common + Currencies.all.map { it.code }).distinct().forEach { code ->
-                        Token(code, { vm.update { it.copy(currency = code) }; vm.onOpen(null) }, active = code == currency)
+                    (listOfNotNull(currency.ifEmpty { null }) + Currencies.common + Currencies.all.map { it.code }).distinct().forEach { code ->
+                        // what the unseen account moved in its own currency is not known for another currency
+                        Token(code, { vm.update { it.copy(currency = code, accountAmount = if (code == currency) it.accountAmount else "") }; vm.onOpen(null) }, active = code == currency)
                     }
                 }
             }
 
-            // the account (and where a transfer goes)
+            // No payment method: the journal counts spending, not what is left on a card or in cash, so a record has no
+            // account to choose (it is booked to the journal's one, unseen). Only an old transfer or adjustment, from before
+            // 0.3, is about accounts by nature and still says which.
             Hairline(Modifier.padding(top = 8.dp))
-            StatRow(Texts.ACCOUNT, account?.name ?: "?", Modifier.testTag("form-account"), onClick = { vm.onOpen(FormField.Account) })
-            if (f.open == FormField.Account) AccountChoices(names, d.accountId ?: state.defaultAccountId) { id -> vm.update { it.copy(accountId = id) }; vm.onOpen(null) }
-            Errors(problemsOf(Problem.Field.Account))
-            if (f.existing != null && d.accountAmount.isNotBlank() && account != null && currency != account.currency) {
-                Column(Modifier.padding(horizontal = 16.dp)) {
-                    UnderlineField(
-                        d.accountAmount, { v -> vm.update { it.copy(accountAmount = v) } }, Modifier.testTag("form-account-amount"),
-                        placeholder = if (d.type == TxType.Expense) Texts.accountAmount(account.currency) else Texts.accountAmountIncome(account.currency),
-                        keyboardType = KeyboardType.Decimal, mono = true, error = problemsOf(Problem.Field.AccountAmount).isNotEmpty(),
-                    )
-                }
-                Errors(problemsOf(Problem.Field.AccountAmount))
+            if (d.type != TxType.Transfer && d.type != TxType.Adjustment) {
+                Errors(problemsOf(Problem.Field.Account) + problemsOf(Problem.Field.AccountAmount))
+            } else {
+                StatRow(Texts.ACCOUNT, account?.name ?: "?", Modifier.testTag("form-account"), onClick = { vm.onOpen(FormField.Account) })
+                if (f.open == FormField.Account) AccountChoices(names, d.accountId ?: state.defaultAccountId) { id -> vm.update { it.copy(accountId = id) }; vm.onOpen(null) }
+                Errors(problemsOf(Problem.Field.Account))
             }
             if (d.type == TxType.Transfer) {
                 val to = names.account(d.toAccountId)

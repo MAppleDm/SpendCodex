@@ -1,7 +1,5 @@
 package dev.spendcodex.data.ai
 
-import dev.spendcodex.data.domain.Account
-import dev.spendcodex.data.domain.AccountKind
 import dev.spendcodex.data.domain.Category
 import dev.spendcodex.data.domain.CategoryKind
 import dev.spendcodex.data.domain.DraftTime
@@ -35,7 +33,6 @@ class AiReaderTest {
     private val today = LocalDate.of(2026, 10, 20)
     private val ctx = AiContext(
         today = today, timeZone = "Europe/Berlin", english = false,
-        accounts = listOf(Account("card", "Карта", AccountKind.Card, "EUR", 1_000_000, 0, 0), Account("cash", "Наличные", AccountKind.Cash, "EUR", null, 0, 0)),
         categories = listOf(Category("cafe", "Кафе", CategoryKind.Expense, null, emptyList(), 0, 0), Category("salary", "Зарплата", CategoryKind.Income, null, emptyList(), 0, 0)),
         defaultCurrency = "EUR", tags = listOf("утро"),
     )
@@ -53,7 +50,7 @@ class AiReaderTest {
     )
 
     @Test
-    fun `the request forces the function, sends the line and names only, never amounts or history`() = runTest {
+    fun `the request forces the function, sends the line and names only, never amounts, history or payment methods`() = runTest {
         server.enqueue(answer("""{"operations":[{"type":"expense","amount":"4.50","description":"кофе","category":"Кафе"}]}"""))
         reader.read("выпил кофе на 4,50 у вокзала", ctx)
         val request = server.takeRequest()
@@ -64,9 +61,10 @@ class AiReaderTest {
         assertEquals("disabled", body["thinking"]!!.jsonObject["type"]!!.jsonPrimitive.content)
         val user = body["messages"]!!.jsonArray[1].jsonObject["content"]!!.jsonPrimitive.content
         assertTrue(user.contains("выпил кофе на 4,50 у вокзала"))
-        assertTrue(user.contains("\"Карта\"") && user.contains("\"Кафе\"") && user.contains("2026-10-20"))
-        // the opening balance of an account (10 000,00) is not part of what is sent
-        assertFalse(user.contains("1000000") || user.contains("10000"))
+        assertTrue(user.contains("\"Кафе\"") && user.contains("2026-10-20"))
+        // the journal counts spending, not balances: no payment methods are sent, and none is asked for
+        assertFalse(user.contains("accounts"))
+        assertFalse(body["tools"].toString().contains("\"account\""))
         assertFalse(user.contains("Зарплата"))
         assertTrue(user.contains("existing_tags") && user.contains("утро"))
     }
@@ -82,7 +80,8 @@ class AiReaderTest {
         val coffee = drafts[0]
         assertEquals(TxType.Expense, coffee.draft.type)
         assertEquals("4.50", coffee.draft.amount)
-        assertEquals("cash", coffee.draft.accountId)
+        // a payment method the model still names is not taken: every record goes to the journal's one account
+        assertNull(coffee.draft.accountId)
         assertEquals("cafe", coffee.draft.categoryId)
         assertEquals(LocalDate.of(2026, 10, 19), coffee.draft.date)
         assertEquals(DraftTime.At(LocalTime.of(8, 30)), coffee.draft.time)
@@ -98,7 +97,6 @@ class AiReaderTest {
         server.enqueue(answer("""{"operations":[{"type":"expense","amount":"15","description":"обед пополам","account":"Сбер","category":"Рестораны","date":"2027-01-01"}]}"""))
         val d = reader.read("обед на двоих 30 евро пополам", ctx).single()
         assertFalse(d.amountInText)
-        assertEquals("Сбер", d.unknownAccount)
         assertEquals("Рестораны", d.unknownCategory)
         assertNull(d.draft.accountId)
         assertNull(d.draft.date)

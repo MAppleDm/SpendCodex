@@ -26,7 +26,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import dev.spendcodex.Texts
 import dev.spendcodex.coreui.AppTheme
-import dev.spendcodex.coreui.ChoiceRow
 import dev.spendcodex.coreui.Hairline
 import dev.spendcodex.coreui.Hint
 import dev.spendcodex.coreui.OutlineButton
@@ -41,7 +40,10 @@ import dev.spendcodex.ui.lock.LockSupport
 import dev.spendcodex.ui.update.UpdateBlock
 import dev.spendcodex.ui.update.UpdateState
 
-/** What the "⋮" opens: where the data goes first, then the journal's lists, then the app's own choices. */
+/**
+ * What the "⋮" opens: where the data goes first, then the journal's lists, then the app's own choices. There are no payment
+ * methods: the journal counts what was spent, not what is left on a card or in cash.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
@@ -53,7 +55,6 @@ fun SettingsScreen(
     update: UpdateState,
     onBack: () -> Unit,
     onData: () -> Unit,
-    onAccounts: () -> Unit,
     onCategories: () -> Unit,
     onAi: () -> Unit,
     onToggleLock: () -> Unit,
@@ -71,15 +72,11 @@ fun SettingsScreen(
         PageHeader(Texts.SETTINGS, onBack)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).navigationBarsPadding()) {
             StatRow(Texts.DATA, "›", Modifier.testTag("settings-data"), onClick = onData)
-            StatRow(Texts.ACCOUNTS, state.accounts.count { !it.archived }.toString() + " ›", Modifier.testTag("settings-accounts"), onClick = onAccounts)
             StatRow(Texts.CATEGORIES_AND_TAGS, "›", Modifier.testTag("settings-categories"), onClick = onCategories)
             Hairline()
             StatRow(Texts.LANGUAGE, Texts.LANGUAGE_NAME, Modifier.testTag("settings-language"), onClick = vm::onLanguage)
             val theme by vm.theme.collectAsState()
             StatRow(Texts.THEME, Texts.themeName(Palette.of(theme)), Modifier.testTag("settings-theme"), onClick = vm::onTheme)
-            val default = state.accounts.firstOrNull { it.id == state.choices.defaultAccountId && !it.archived } ?: state.accounts.firstOrNull { !it.archived }
-            StatRow(Texts.DEFAULT_ACCOUNT, default?.name ?: "—", Modifier.testTag("settings-default-account"), onClick = vm::onToggleAccount)
-            if (u.accountOpen) state.accounts.filter { !it.archived }.forEach { a -> ChoiceRow(a.name, a.id == default?.id, { vm.onAccount(a.id) }, caption = a.currency) }
             StatRow(Texts.DEFAULT_CURRENCY, state.choices.defaultCurrency ?: "—", Modifier.testTag("settings-currency"), onClick = vm::onToggleCurrency)
             if (u.currencyOpen) {
                 FlowRow(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {

@@ -3,6 +3,23 @@
 The person's clarifications override the [original AI-generated brief](brief.ru.md). The current product direction is
 AI-first expense capture (0.3), with readable receipt photos, manual export/restore and secondary manual entry.
 
+## The rule: spending, not balances
+
+SpendCodex counts **what was spent**. It is not bookkeeping of money on cards, in cash or in bank accounts, so nothing
+that only makes sense for balances belongs in it: no payment methods, no default payment method, no balances, transfers,
+adjustments or opening amounts. The author asked for this directly ("тут не учёт баланса, а учёт расходов", 0.3.2) after
+seeing "Способы оплаты" and "Оплата по умолчанию" in the settings. A new feature that asks "paid how?" or "from which
+account?" goes against this rule.
+
+- Since 0.3.2 there is no payment method anywhere: not in settings, the form, search, export choices, journal rows or the
+  DeepSeek request and answer. Account names are not searched either.
+- The stored format still has one account per record (Room schema and JSON format 2), so new journals get one unseen
+  account ("Расходы"/"Spending") and every new record is booked to the default one. If none is active, the default is
+  unarchived, or one is made, so a record can always be saved. Repeating or refunding a purchase of an archived account
+  uses the default one.
+- Older journals keep their accounts and every record's link to them, untouched; backups still carry them. Only old
+  transfers and adjustments, which are about accounts by nature, still name theirs in the form and in search results.
+
 ## Product and the FatCodex reference
 
 - Android: Kotlin, Compose, Room, Hilt; `app`, `core-ui`, `data` modules, matching FatCodex's engineering approach.
@@ -14,7 +31,7 @@ AI-first expense capture (0.3), with readable receipt photos, manual export/rest
   dates, tags or an amount absent from the note block the AI save action. Income/transfer/balance intent is refused.
 - Manual entry is the page-with-plus action beside search. It also handles corrections and receipt attachment.
 - The main feed and default search contain expenses and purchase refunds. No new income/transfer/adjustment picker,
-  income category creation, opening balance entry or reconciliation UI exists. Payment methods are labels without balances.
+  income category creation, opening balance entry or reconciliation UI exists. There are no payment methods (see above).
 - Previously stored non-expense types remain editable and searchable through explicit legacy type filters. JSON data,
   links, opening amounts and old settings are preserved; updating never deletes or reinterprets existing records.
 
@@ -22,8 +39,9 @@ AI-first expense capture (0.3), with readable receipt photos, manual export/rest
 
 - A forced `record_operations` function returns one complete batch (up to 50 expenses), or an explicit clarification status.
   An invalid item refuses the whole batch; malformed/duplicate/truncated answers are refused rather than partially saved.
-- The request contains the submitted note, date, time zone, language, default currency, payment-method names/currencies,
-  expense-category paths/keywords and existing tag names. No history, opening balances or photos are included.
+- The request contains the submitted note, date, time zone, language, default currency, expense-category paths/keywords
+  and existing tag names. No history, payment methods, opening balances or photos are included, and the answer has no
+  payment-method field: how something was paid is never recorded.
 - The key is AES-GCM encrypted with Android Keystore, used for API authentication, excluded from exports and Android backup.
   A saved key is enough to use primary input; the old `ai_enabled` setting survives only for export/restore compatibility.
 - Typing alone never calls the API. A synchronous busy guard prevents concurrent sends. Editing or cancelling cancels the
@@ -79,6 +97,6 @@ AI-first expense capture (0.3), with readable receipt photos, manual export/rest
 
 ## Deliberate limits
 
-No account balances, new income bookkeeping, bank integration, exchange-rate service, charts, budgets, forecasts, chat,
+No payment methods, account balances, new income bookkeeping, bank integration, exchange-rate service, charts, budgets, forecasts, chat,
 financial advice or device sync. Real API behaviour is checked through the documented protocol and stand-in server tests;
 no live user key is used by automated verification.

@@ -155,7 +155,7 @@ class JournalViewModel @Inject constructor(
                 val n = names.value
                 val choices = settings.choices.value
                 val default = ledger.defaultAccountId()
-                val ctx = AiContext(LocalDate.now(clock), clock.zone.id, Lang.en, n.accounts, n.categories,
+                val ctx = AiContext(LocalDate.now(clock), clock.zone.id, Lang.en, n.categories,
                     choices.defaultCurrency, n.tags.filter { !it.archived }.map { it.name })
                 val drafts = withContext(Dispatchers.IO) { ai.read(c.text, ctx) }
                 if (composer.value.batchId != c.batchId) return@launch
@@ -206,7 +206,6 @@ class JournalViewModel @Inject constructor(
             }) }
         }
         val warnings = buildList {
-            a.unknownAccount?.let { add(Texts.aiUnknownAccount(it)) }
             a.unknownCategory?.let { add(Texts.aiUnknownCategory(it)) }
         }
         val title = listOfNotNull(a.draft.description.ifBlank { null } ?: Texts.typeTitle(a.draft.type),

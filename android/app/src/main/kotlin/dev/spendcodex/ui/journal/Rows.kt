@@ -49,7 +49,7 @@ fun feedItems(rows: List<FeedRow>, headingFirst: Boolean = false): List<FeedItem
 
 /** What a row says: the thing, then when, where and how much, the way it is easiest to remember. */
 @Composable
-fun OperationRow(row: FeedRow, showAccount: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun OperationRow(row: FeedRow, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val c = AppTheme.colors
     val type = TxType.of(row.type) ?: TxType.Expense
     val category = row.categoryName?.let { name -> row.parentName?.let { "$it › $name" } ?: name }
@@ -66,7 +66,6 @@ fun OperationRow(row: FeedRow, showAccount: Boolean, onClick: () -> Unit, modifi
                 if (type == TxType.Refund) add(Texts.type(type))
                 if (category != null && title != category) add(category)
                 if (row.description != null && row.payee != null) add(row.payee!!)
-                if (showAccount) add(row.accountName)
             }
         }
         row.tagNames?.split(FeedSql.TAG_SEPARATOR)?.filter { it.isNotEmpty() }?.sorted()?.joinToString(" ") { "#$it" }?.let { add(it) }

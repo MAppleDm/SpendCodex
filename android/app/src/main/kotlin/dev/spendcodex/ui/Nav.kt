@@ -31,8 +31,6 @@ sealed interface Screen {
     /** [fromLine]: opened with what the quick line had; recording it here clears the line. */
     data class Operation(val request: OperationRequest, val fromLine: Boolean = false, override val key: String = UUID.randomUUID().toString()) : Screen
     data class Search(val filter: Filter = Filter(), override val key: String = UUID.randomUUID().toString()) : Screen
-    data object Accounts : Screen { override val key = "accounts" }
-    data class AccountEdit(val id: String?, override val key: String = UUID.randomUUID().toString()) : Screen
     data object Categories : Screen { override val key = "categories" }
     data class CategoryEdit(val id: String?, val kind: CategoryKind, val parentId: String?, override val key: String = UUID.randomUUID().toString()) : Screen
     data class TagEdit(val id: String, override val key: String = UUID.randomUUID().toString()) : Screen

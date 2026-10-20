@@ -14,7 +14,6 @@ import dev.spendcodex.data.backup.ExportScope
 import dev.spendcodex.data.backup.ImportError
 import dev.spendcodex.data.backup.ReadResult
 import dev.spendcodex.data.backup.RestorePreview
-import dev.spendcodex.data.domain.Account
 import dev.spendcodex.data.domain.Filter
 import dev.spendcodex.data.repo.Ledger
 import dev.spendcodex.data.settings.Settings
@@ -54,7 +53,6 @@ data class DataUi(
     /** Set when the page was opened from a search: the export is that search. */
     val fromSearch: Filter? = null,
     val period: Period = Period.All,
-    val accountsOpen: Boolean = false,
     val busy: Boolean = false,
     val message: String? = null,
     val messageError: Boolean = false,
@@ -64,7 +62,6 @@ data class DataUi(
 data class DataUiState(
     val ui: DataUi = DataUi(),
     val preview: ExportPreview? = null,
-    val accounts: List<Account> = emptyList(),
     val lastBackupAt: Long? = null,
     val hasSafetyCopy: Boolean = false,
 )
@@ -88,8 +85,8 @@ class DataViewModel @Inject constructor(
         .debounce(150)
         .mapLatest { runCatching { backups.preview(it) }.getOrNull() }
 
-    val state: StateFlow<DataUiState> = combine(ui, preview, ledger.accounts, settings.lastBackupAt, safety) { u, p, a, last, s ->
-        DataUiState(u, p, a, last, s)
+    val state: StateFlow<DataUiState> = combine(ui, preview, settings.lastBackupAt, safety) { u, p, last, s ->
+        DataUiState(u, p, last, s)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, DataUiState())
 
     fun open(key: String, scope: ExportScope?) {
@@ -114,15 +111,6 @@ class DataViewModel @Inject constructor(
         }
         ui.update { it.copy(period = period, fromSearch = null, scope = it.scope.copy(filter = it.scope.filter.copy(from = from, to = to)), message = null) }
     }
-
-    fun onAccount(id: String) = ui.update {
-        val ids = it.scope.filter.accountIds
-        it.copy(scope = it.scope.copy(filter = it.scope.filter.copy(accountIds = if (id in ids) ids - id else ids + id)), message = null)
-    }
-
-    fun onAllAccounts() = ui.update { it.copy(scope = it.scope.copy(filter = it.scope.filter.copy(accountIds = emptySet())), message = null) }
-
-    fun onToggleAccounts() = ui.update { it.copy(accountsOpen = !it.accountsOpen) }
 
     fun onNotes(include: Boolean) = ui.update { it.copy(scope = it.scope.copy(includeNotes = include), message = null) }
 

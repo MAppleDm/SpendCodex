@@ -267,7 +267,9 @@ class LedgerTest {
         assertEquals(listOf("возврат долга"), ids(Filter(types = setOf(TxType.Income), currencies = setOf("USD"))))
         assertEquals(listOf("такси"), ids(Filter(types = setOf(TxType.Expense), accountIds = setOf(cash))))
         assertEquals(emptyList<String>(), ids(Filter(text = "кофе", accountIds = setOf(cash))))
-        assertEquals(listOf("такси"), ids(Filter(text = "налич", types = setOf(TxType.Expense))))
+        // payment methods are not shown, so their names find nothing (in an old journal "карта" would find almost everything)
+        assertEquals(emptyList<String>(), ids(Filter(text = "налич")))
+        assertEquals(emptyList<String>(), ids(Filter(text = "карта")))
         // LIKE wildcards in the query are plain characters
         assertEquals(emptyList<String>(), ids(Filter(text = "%")))
         val totals = ledger.totalsNow(Filter(accountIds = setOf(cash)))
@@ -304,17 +306,47 @@ class LedgerTest {
     }
 
     @Test
-    fun `a new journal starts with categories and two accounts in its language`() = runTest {
+    fun `a new journal starts with categories and one hidden account in its language`() = runTest {
         ledger.seed(Language.Ru, "RUB")
         val accounts = ledger.accountsNow()
-        assertEquals(listOf("Карта", "Наличные"), accounts.map { it.name })
+        assertEquals(listOf("Расходы"), accounts.map { it.name })
         assertTrue(accounts.all { it.currency == "RUB" })
         assertEquals(accounts.first().id, env.settings.choices.value.defaultAccountId)
         val categories = ledger.categoriesNow()
         assertTrue(categories.any { it.name == "Кафе и рестораны" && "кофе" in it.keywords })
         assertTrue(categories.all { it.kind == CategoryKind.Expense })
         ledger.seed(Language.En, "EUR") // a journal that has accounts is not seeded again
+        assertEquals(1, ledger.accountsNow().size)
+    }
+
+    @Test
+    fun `with no payment methods to choose, a record always finds an account`() = runTest {
+        // a journal with none (a backup from before the first start): the one account is made, in the main currency
+        env.settings.setDefaultCurrency("RUB")
+        val first = env.saved(Draft(amount = "350", description = "кофе"))
+        val made = ledger.accountsNow().single()
+        assertEquals(made.id, first.accountId)
+        assertEquals("RUB", made.currency)
+        assertEquals("RUB", first.currency)
+        // every account archived in an older version: the default one comes back rather than the record being refused
+        val cash = env.account("Наличные", "RUB", kind = AccountKind.Cash)
+        env.settings.setDefaultAccount(cash)
+        ledger.setAccountArchived(made.id, true)
+        ledger.setAccountArchived(cash, true)
+        assertEquals(cash, env.saved(Draft(amount = "820", description = "такси")).accountId)
+        assertFalse(ledger.accountsNow().first { it.id == cash }.archived)
         assertEquals(2, ledger.accountsNow().size)
+    }
+
+    @Test
+    fun `repeating or refunding a purchase of an archived payment method uses the default one`() = runTest {
+        val old = env.account("Старая карта")
+        val card = env.account("Карта")
+        val tx = env.saved(Draft(amount = "4.50", description = "кофе", accountId = old))
+        ledger.setAccountArchived(old, true)
+        env.settings.setDefaultAccount(card)
+        assertEquals(card, (ledger.repeat(tx.id) as SaveResult.Saved).tx.accountId)
+        assertEquals(card, env.saved(ledger.refundDraft(tx.id)!!).accountId)
     }
 
     @Test

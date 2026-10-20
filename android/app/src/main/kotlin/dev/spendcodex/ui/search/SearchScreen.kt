@@ -74,7 +74,6 @@ fun SearchScreen(state: SearchUiState, vm: SearchViewModel, onBack: () -> Unit, 
             Token(if (f.from == null && f.to == null) Texts.PERIOD else Format.range(f.from, f.to) ?: Texts.PERIOD, { vm.onOpen(SearchField.Period) },
                 weak = f.from == null && f.to == null, active = state.open == SearchField.Period, modifier = Modifier.testTag("filter-period"))
             Token(label(Texts.TYPES, f.types.size), { vm.onOpen(SearchField.Types) }, weak = f.types.isEmpty(), active = state.open == SearchField.Types, modifier = Modifier.testTag("filter-types"))
-            Token(label(Texts.ACCOUNTS, f.accountIds.size), { vm.onOpen(SearchField.Accounts) }, weak = f.accountIds.isEmpty(), active = state.open == SearchField.Accounts, modifier = Modifier.testTag("filter-accounts"))
             Token(label(Texts.CATEGORIES, f.categoryIds.size), { vm.onOpen(SearchField.Categories) }, weak = f.categoryIds.isEmpty(), active = state.open == SearchField.Categories, modifier = Modifier.testTag("filter-categories"))
             if (state.names.tags.isNotEmpty()) {
                 Token(label(Texts.TAGS, f.tagIds.size), { vm.onOpen(SearchField.Tags) }, weak = f.tagIds.isEmpty(), active = state.open == SearchField.Tags, modifier = Modifier.testTag("filter-tags"))
@@ -105,7 +104,7 @@ fun SearchScreen(state: SearchUiState, vm: SearchViewModel, onBack: () -> Unit, 
             LazyColumn(Modifier.weight(1f).fillMaxWidth().navigationBarsPadding().testTag("search-results"), state = listState) {
                 items(items, key = { it.key }) { item ->
                     when (item) {
-                        is FeedItem.Op -> OperationRow(item.row, true, onClick = { onOpen(item.row.id) })
+                        is FeedItem.Op -> OperationRow(item.row, onClick = { onOpen(item.row.id) })
                         is FeedItem.Day -> DateRow(Format.dayTitle(item.date, state.today))
                     }
                 }
@@ -150,9 +149,6 @@ private fun Options(field: SearchField, state: SearchUiState, vm: SearchViewMode
                 listOf(TxType.Expense, TxType.Refund).forEach { t -> ChoiceRow(Texts.typeTitle(t), t in f.types, { vm.onType(t) }) }
                 SectionCaption(Texts.LEGACY_TYPES)
                 listOf(TxType.Income, TxType.Transfer, TxType.Adjustment).forEach { t -> ChoiceRow(Texts.typeTitle(t), t in f.types, { vm.onType(t) }) }
-            }
-            SearchField.Accounts -> state.names.accounts.forEach { a ->
-                ChoiceRow(a.name, a.id in f.accountIds, { vm.onAccount(a.id) }, caption = a.currency + if (a.archived) " · " + Texts.ARCHIVED.lowercase() else "")
             }
             SearchField.Categories -> listOf(CategoryKind.Expense, CategoryKind.Income).forEach { kind ->
                 val all = state.names.categories.filter { it.kind == kind }

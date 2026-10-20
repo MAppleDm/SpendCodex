@@ -80,17 +80,11 @@ fun DataScreen(state: DataUiState, vm: DataViewModel, onBack: () -> Unit, onForm
                     Period.ThisYear to Texts.THIS_YEAR, Period.Last12 to Texts.LAST_12).forEach { (p, label) ->
                     ChoiceRow(label, u.period == p, { vm.onPeriod(p) }, Modifier.testTag("export-period-${p.name.lowercase()}"))
                 }
-                val chosen = u.scope.filter.accountIds
-                StatRow(Texts.ACCOUNTS, if (chosen.isEmpty()) Texts.ANY else Texts.selected(chosen.size), Modifier.testTag("export-accounts"), onClick = vm::onToggleAccounts)
-                if (u.accountsOpen) {
-                    ChoiceRow(Texts.ANY, chosen.isEmpty(), vm::onAllAccounts)
-                    state.accounts.forEach { a -> ChoiceRow(a.name, a.id in chosen, { vm.onAccount(a.id) }, caption = a.currency) }
-                }
             }
             StatRow(Texts.NOTES, if (u.scope.includeNotes) Texts.INCLUDED else Texts.EXCLUDED, Modifier.testTag("export-notes"), onClick = { vm.onNotes(!u.scope.includeNotes) })
             state.preview?.let { p ->
                 Text(
-                    Texts.exportPreview(p.transactions, Format.range(p.first, p.last), p.accounts.joinToString(", ").ifEmpty { "—" }, p.notes),
+                    Texts.exportPreview(p.transactions, Format.range(p.first, p.last), p.notes),
                     style = AppTheme.type.secondary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("export-preview"),
                 )
             }
@@ -130,7 +124,7 @@ fun Restore(restore: RestoreUi, vm: DataViewModel, onDone: () -> Unit = {}) {
             PanelTitle(Texts.RESTORE)
             Hint(Texts.restoreSummary(
                 date = runCatching { Format.moment(java.time.Instant.parse(p.exportedAt).toEpochMilli()) }.getOrDefault(p.exportedAt),
-                version = p.appVersion, accounts = s.accounts.size, categories = s.categories.size, tags = s.tags.size, ops = s.transactions.size,
+                version = p.appVersion, categories = s.categories.size, tags = s.tags.size, ops = s.transactions.size,
                 range = Format.range(p.first, p.last),
             ))
             Hint(Texts.restoreReplaces(p.currentTransactions), color = AppTheme.colors.time)
