@@ -37,13 +37,10 @@ object Texts {
     val EDIT get() = t("исправить", "edit")
     val LOAD_MORE get() = t("ещё", "more")
 
-    fun recorded(n: Int, what: String) = if (n == 1) t("Записано: $what", "Recorded: $what") else t("Записано операций: $n", "Recorded: $n operations")
     val SAVED get() = t("Сохранено", "Saved")
     fun deleted(what: String) = t("Удалено: $what", "Deleted: $what")
-    fun repeated(what: String) = t("Повторено: $what", "Repeated: $what")
     val UNDO get() = t("отменить", "undo")
     val RESTORE_ONE get() = t("вернуть", "bring back")
-    val UNDONE get() = t("Отменено", "Undone")
 
     // the parsed line
     val SUGGESTIONS get() = t("Как раньше", "Like before")

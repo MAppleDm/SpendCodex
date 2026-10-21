@@ -92,6 +92,9 @@ class JournalFlowTest {
         } }
         settle { vm.state.value.rows.size == 2 && vm.state.value.todayTotals.size == 2 }
         compose.onNodeWithText("старая зарплата").assertDoesNotExist()
+        // spending is counted, not taken away from a balance: no minus anywhere, a refund keeps its plus
+        compose.onAllNodesWithText("−", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("+2,00 €", substring = true, useUnmergedTree = true).assertCountEquals(2)
         assertTrue(vm.state.value.todayTotals.all { it.type in setOf("expense", "refund") })
         assertEquals(3, runBlocking { env.ledger.feedNow(Filter(), 10).size })
         val search = env.search()

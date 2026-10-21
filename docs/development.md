@@ -40,7 +40,7 @@ JVM only (Robolectric with real SQLite), no emulator needed. What they cover:
 | `PaletteTest` | every palette (black & white, avocado; light and dark) keeps text at WCAG 4.5:1; the black & white look is unchanged; the choice persists and survives erasing |
 | `MigrationTest` | a database built from the exported v1 schema opens with today's app |
 | `JournalFlowTest` | secondary manual entry, expense-only feed/totals, legacy data preserved and editable, old income searchable explicitly |
-| `AiFlowTest` | primary DeepSeek input, automatic save and tags, batch atomicity, currencies, undo, no-key state, income rejection, network retry, cancellation and duplicate taps |
+| `AiFlowTest` | primary DeepSeek input, automatic save and tags without an undo line, swipe-right delete and bring back, batch atomicity, currencies, no-key state, income rejection, network retry, cancellation and duplicate taps |
 
 ## Layout
 

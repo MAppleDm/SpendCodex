@@ -7,7 +7,7 @@
 An expense journal with DeepSeek text entry. From the same family as [FatCodex](https://github.com/MAppleDm/FatCodex).
 
 Write **“coffee 4.50, taxi home 12 yesterday”** and send. DeepSeek extracts expenses, chooses categories and adds useful
-tags. Validated records save immediately, with undo. Tap any record to edit it. No chat or analytics dashboard.
+tags. Validated records save immediately. Swipe a record right to delete it; tap it to edit. No chat or analytics dashboard.
 
 ## Get started
 
@@ -23,7 +23,8 @@ through the AI confirmation action. Network failures preserve the note for retry
 
 **Manual entry** is the page-with-plus icon beside search in the header. It works offline without a key.
 The form includes amount, currency, category, date/time, merchant, tags, notes and receipt photos.
-Stored records support editing, repeating, purchase refunds and deletion with undo.
+Stored records support editing, repeating and purchase refunds. A swipe right (or Delete on the record) removes one,
+and the line that follows can bring it back.
 
 ## Expenses only
 

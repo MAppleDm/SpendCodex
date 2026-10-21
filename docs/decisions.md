@@ -27,7 +27,9 @@ account?" goes against this rule.
   as a reference and is not modified. RU/EN, biometric lock, GitHub update verification and export-for-analysis are retained.
 - Every explicit send goes to DeepSeek using the user's key. There is no local-parser fallback, chat or financial advice.
   DeepSeek extracts expenses, picks an existing expense category and adds useful tags, reusing existing tag names.
-- Validated ordinary batches save immediately with undo. Unknown references require review. Invalid amounts, currencies,
+- Validated ordinary batches save immediately, with no "undo" line: the new rows are the confirmation (0.3.4, the author
+  found the line under every new record awkward). A record is deleted by swiping it right in the journal (also a TalkBack
+  action); a deletion, by swipe or on the record page, offers "bring back" for a few seconds. Unknown references require review. Invalid amounts, currencies,
   dates, tags or an amount absent from the note block the AI save action. Income/transfer/balance intent is refused.
 - Manual entry is the page-with-plus action beside search. It also handles corrections and receipt attachment.
 - The main feed and default search contain expenses and purchase refunds. No new income/transfer/adjustment picker,
@@ -54,6 +56,8 @@ account?" goes against this rule.
 
 ## Money and time
 
+- Spending is shown without a minus sign (since 0.3.4): in the journal, the day's total, search totals and messages an
+  expense is "450 ₽", not "−450 ₽", since nothing is being taken from a balance. Refunds and old income keep their "+".
 - `Long` minor units, ISO 4217 exponents, exact decimal-string parsing. Excess precision is refused instead of rounded;
   currencies are kept separate. The maximum per-operation amount is 10^15 minor units.
 - The schema retains older account amounts and transfer fields for lossless compatibility. Balance computation is not used

@@ -223,7 +223,8 @@ class JournalViewModel @Inject constructor(
             return
         }
         if (composer.value.batchId == batchId) composer.value = ComposerState()
-        announce(results.filterIsInstance<SaveResult.Saved>())
+        // the new rows are the confirmation; a mistaken one is swiped away
+        if (results.any { it is SaveResult.Saved && it.created }) _effects.trySend(JournalEffect.Recorded)
     }
 
     fun onAiRetry() { onSend() }
@@ -249,24 +250,27 @@ class JournalViewModel @Inject constructor(
         }
     }
 
-    private fun announce(saved: List<SaveResult.Saved>) {
-        val created = saved.filter { it.created }.map { it.tx }
-        if (created.isEmpty()) return
-        val what = if (created.size == 1) describe(created.single()) else ""
-        notices.show(Notice(Texts.recorded(created.size, what), Texts.UNDO, undo = { created.forEach { ledger.delete(it.id) } }))
-        _effects.trySend(JournalEffect.Recorded)
+    /** A record or the manual form was just recorded: the journal goes to the newest rows. */
+    fun onRecorded() { _effects.trySend(JournalEffect.Recorded) }
+
+    /** A swipe deleted a record; the line above the input brings it back, with its tags, receipts and refunds' links. */
+    fun onDelete(id: String) {
+        viewModelScope.launch {
+            val removed = ledger.delete(id) ?: return@launch
+            notices.show(Notice(Texts.deleted(describe(removed.tx)), Texts.RESTORE_ONE, undo = { ledger.undo(removed) }))
+        }
     }
 
     fun describe(tx: Transaction): String {
         val title = tx.description ?: tx.payee ?: names.value.categoryPath(tx.categoryId) ?: Texts.type(tx.type)
-        return "$title ${Format.money(if (tx.type == TxType.Expense) -tx.amountMinor else tx.amountMinor, tx.currency)}"
+        return "$title ${Format.money(tx.amountMinor, tx.currency, withSign = tx.type == TxType.Income || tx.type == TxType.Refund)}"
     }
 
     fun onNeedMore() { if (state.value.hasMore) limit.update { it + PAGE } }
     fun onNotice(notice: Notice) {
         notices.dismiss(notice.id)
         val undo = notice.undo ?: return
-        viewModelScope.launch { undo(); notices.show(Notice(Texts.UNDONE)) }
+        viewModelScope.launch { undo() }
     }
     fun dismissNotice(id: Long) = notices.dismiss(id)
     fun onForeground() { today.value = LocalDate.now(clock) }

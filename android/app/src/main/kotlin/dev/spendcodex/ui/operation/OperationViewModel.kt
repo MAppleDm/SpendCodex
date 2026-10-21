@@ -79,8 +79,11 @@ data class OperationUiState(
 )
 
 sealed interface OperationEffect {
-    /** The page is done; [recordedFromLine] tells the journal to clear the line it was opened from. */
-    data class Close(val recordedFromLine: Boolean = false) : OperationEffect
+    /**
+     * The page is done. [recorded]: a new record was made, so the journal shows its newest rows; [recordedFromLine] also
+     * tells it to clear the line the page was opened from.
+     */
+    data class Close(val recorded: Boolean = false, val recordedFromLine: Boolean = false) : OperationEffect
 }
 
 @HiltViewModel
@@ -193,12 +196,10 @@ class OperationViewModel @Inject constructor(
             when (val r = ledger.save(f.draft, f.photos)) {
                 is SaveResult.Invalid -> form.update { it.copy(busy = false, problems = r.problems) }
                 is SaveResult.Saved -> {
-                    notices.show(
-                        if (f.existing != null) Notice(Texts.SAVED)
-                        else Notice(Texts.recorded(1, describe(r.tx)), Texts.UNDO, undo = { ledger.delete(r.tx.id) }),
-                    )
+                    // a new record needs no word: it is in the journal, and a swipe deletes it
+                    if (f.existing != null) notices.show(Notice(Texts.SAVED))
                     form.update { FormState() }
-                    _effects.send(OperationEffect.Close(recordedFromLine = f.fromLine && f.existing == null))
+                    _effects.send(OperationEffect.Close(recorded = f.existing == null, recordedFromLine = f.fromLine && f.existing == null))
                 }
             }
           } catch (e: CancellationException) { throw e }
@@ -227,9 +228,8 @@ class OperationViewModel @Inject constructor(
                 form.update { it.copy(problems = listOf(Problem.AccountArchived)) }
                 return@launch
             }
-            notices.show(Notice(Texts.repeated(describe(r.tx)), Texts.UNDO, undo = { ledger.delete(r.tx.id) }))
             form.update { FormState() }
-            _effects.send(OperationEffect.Close())
+            _effects.send(OperationEffect.Close(recorded = true))
         }
     }
 
@@ -248,8 +248,7 @@ class OperationViewModel @Inject constructor(
     private fun describe(tx: Transaction): String {
         val n = state.value.names
         val title = tx.description ?: tx.payee ?: n.categoryPath(tx.categoryId) ?: Texts.type(tx.type)
-        val signed = if (tx.type == TxType.Expense) -tx.amountMinor else tx.amountMinor
-        return "$title ${Format.money(signed, tx.currency, withSign = tx.type == TxType.Income || tx.type == TxType.Refund)}"
+        return "$title ${Format.money(tx.amountMinor, tx.currency, withSign = tx.type == TxType.Income || tx.type == TxType.Refund)}"
     }
 
     suspend fun photoBytes(photo: ReceiptPhoto): ByteArray? = photo.bytes ?: ledger.receiptBytes(photo.receipt.id)

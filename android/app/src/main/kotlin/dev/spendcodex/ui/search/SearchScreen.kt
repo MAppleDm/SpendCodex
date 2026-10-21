@@ -113,12 +113,12 @@ fun SearchScreen(state: SearchUiState, vm: SearchViewModel, onBack: () -> Unit, 
     }
 }
 
-/** "42 операции · расходы −1 230,00 € · −15 000 ₽ · доходы +500,00 €": per currency, never added across them. */
+/** "42 операции · расходы 1 230,00 € · 15 000 ₽ · доходы +500,00 €": per currency, never added across them. */
 private fun summary(totals: List<TypeTotal>): String {
     val count = totals.sumOf { it.count }
-    fun part(type: TxType, label: String, sign: Int) = totals.filter { it.type == type.code && it.total != 0L }.sortedBy { it.currency }
-        .map { Format.money(sign * it.total, it.currency, withSign = sign > 0) }.takeIf { it.isNotEmpty() }?.let { "$label ${it.joinToString(" · ")}" }
-    return listOfNotNull(Texts.found(count), part(TxType.Expense, Texts.SPENT, -1), part(TxType.Refund, Texts.REFUNDED, 1), part(TxType.Income, Texts.EARNED, 1))
+    fun part(type: TxType, label: String, withSign: Boolean) = totals.filter { it.type == type.code && it.total != 0L }.sortedBy { it.currency }
+        .map { Format.money(it.total, it.currency, withSign) }.takeIf { it.isNotEmpty() }?.let { "$label ${it.joinToString(" · ")}" }
+    return listOfNotNull(Texts.found(count), part(TxType.Expense, Texts.SPENT, false), part(TxType.Refund, Texts.REFUNDED, true), part(TxType.Income, Texts.EARNED, true))
         .joinToString(" · ")
 }
 

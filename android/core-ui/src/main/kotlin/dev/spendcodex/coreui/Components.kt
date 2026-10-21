@@ -1,7 +1,12 @@
 package dev.spendcodex.coreui
 
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -9,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -23,22 +29,31 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -52,8 +67,11 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 
 /** Press feedback is a flat grey wash, not a ripple. */
 fun Modifier.tap(enabled: Boolean = true, onClick: () -> Unit): Modifier = composed {
@@ -265,6 +283,45 @@ fun DateRow(text: String, modifier: Modifier = Modifier, extra: String? = null) 
     Row(modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 2.dp), verticalAlignment = Alignment.Bottom) {
         Text(text, style = AppTheme.type.caption, modifier = Modifier.weight(1f))
         if (extra != null) Text(extra, style = AppTheme.type.caption.copy(color = AppTheme.colors.tertiary, fontFeatureSettings = "tnum"))
+    }
+}
+
+private const val SWIPE_THRESHOLD = 0.4f
+
+/**
+ * A row deleted by swiping it to the right. Let go past [SWIPE_THRESHOLD] of its width and it slides away and [onDelete]
+ * runs; short of that it springs back. Underneath, [label] shows the whole time, turning red (with a tick of the phone)
+ * once letting go would delete. A row still there a moment after sliding away was not deleted, so it comes back.
+ */
+@Composable
+fun SwipeToDelete(label: String, onDelete: () -> Unit, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    val c = AppTheme.colors
+    val haptic = LocalHapticFeedback.current
+    var width by remember { mutableIntStateOf(0) }
+    var offset by remember { mutableFloatStateOf(0f) }
+    val moving by remember { derivedStateOf { offset > 0f } }
+    val armed by remember { derivedStateOf { width > 0 && offset >= width * SWIPE_THRESHOLD } }
+    LaunchedEffect(armed) { if (armed) haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate) }
+    Box(
+        modifier.fillMaxWidth().onSizeChanged { width = it.width }.clipToBounds().draggable(
+            state = rememberDraggableState { delta -> offset = (offset + delta).coerceIn(0f, width.toFloat()) },
+            orientation = Orientation.Horizontal,
+            onDragStopped = {
+                val delete = width > 0 && offset >= width * SWIPE_THRESHOLD
+                animate(offset, if (delete) width.toFloat() else 0f, animationSpec = tween(160)) { v, _ -> offset = v }
+                if (delete) {
+                    onDelete()
+                    delay(1_500)
+                    animate(offset, 0f, animationSpec = tween(160)) { v, _ -> offset = v }
+                }
+            },
+        ),
+    ) {
+        if (moving) {
+            Text(label, style = AppTheme.type.body.copy(color = if (armed) c.error else c.tertiary),
+                modifier = Modifier.align(Alignment.CenterStart).padding(start = 16.dp))
+        }
+        Box(Modifier.absoluteOffset { IntOffset(offset.roundToInt(), 0) }.background(c.background)) { content() }
     }
 }
 

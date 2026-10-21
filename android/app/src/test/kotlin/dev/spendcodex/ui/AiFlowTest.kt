@@ -74,7 +74,7 @@ class AiFlowTest {
     private fun type(text: String) = compose.onNodeWithContentDescription("кофе 4.50").performTextReplacement(text)
     private fun send() = compose.onNodeWithContentDescription(Texts.AI_SEND).performClick()
 
-    @Test fun `even a simple line goes to DeepSeek on send and saves with generated tags with undo`() {
+    @Test fun `even a simple line goes to DeepSeek on send and saves with generated tags and no undo line`() {
         server.enqueue(answer(coffee))
         show()
         type("кофе 4.50")
@@ -88,8 +88,29 @@ class AiFlowTest {
         assertEquals("кофе 4.50", tx.inputText)
         assertEquals(450L, tx.amountMinor)
         assertEquals(setOf("кофе", "кафе"), runBlocking { env.ledger.tagNames(tx.tagIds).toSet() })
+        compose.onNodeWithTag("notice").assertDoesNotExist()
+        compose.onNodeWithTag("operation").assertTextContains("4,50 €")
+    }
+
+    @Test fun `a swipe right deletes a record, a short one does not, and the deletion can be taken back`() {
+        server.enqueue(answer(coffee))
+        show()
+        type("кофе 4.50")
+        send()
+        settle { count() == 1 && vm.state.value.composer.text.isEmpty() }
+        val id = runBlocking { env.ledger.feedNow(Filter(), 5).single().id }
+        compose.onNodeWithTag("operation").performTouchInput { swipeRight(startX = left, endX = left + width * 0.25f) }
+        settle { vm.state.value.rows.size == 1 }
+        compose.onNodeWithTag("operation").assertIsDisplayed()
+        assertEquals(1, count())
+        compose.onNodeWithTag("operation").performTouchInput { swipeRight() }
+        settle { count() == 0 && vm.state.value.rows.isEmpty() }
+        compose.onNodeWithText("Удалено: кофе 4,50 €").assertIsDisplayed()
         compose.onNodeWithTag("notice-action").performClick()
-        settle { count() == 0 }
+        settle { count() == 1 }
+        val back = runBlocking { env.ledger.get(id)!! }
+        assertEquals(setOf("кофе", "кафе"), runBlocking { env.ledger.tagNames(back.tagIds).toSet() })
+        compose.onNodeWithTag("notice").assertDoesNotExist()
     }
 
     @Test fun `one invalid amount blocks the whole batch and cannot be bypassed by confirming`() {
@@ -116,8 +137,7 @@ class AiFlowTest {
         assertEquals(setOf("EUR", "JPY"), rows.map { it.currency }.toSet())
         assertEquals(1200L, rows.single { it.currency == "JPY" }.amountMinor)
         assertTrue(rows.all { it.accountAmountMinor == null })
-        compose.onNodeWithTag("notice-action").performClick()
-        settle { count() == 0 }
+        compose.onNodeWithTag("notice").assertDoesNotExist()
     }
 
     @Test fun `network failure preserves text and retry plus repeated taps creates exactly one expense`() {

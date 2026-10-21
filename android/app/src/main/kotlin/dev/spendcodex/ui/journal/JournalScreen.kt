@@ -52,7 +52,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 
-/** Expenses, a daily total, and one text input. Manual entry lives beside search in the header. */
+/** Expenses, a daily total, and one text input. Manual entry lives beside search in the header; a swipe right deletes a record. */
 @Composable
 fun JournalScreen(
     state: JournalUiState,
@@ -92,7 +92,7 @@ fun JournalScreen(
                     items(items, key = { it.key }) { item ->
                         val animate = Modifier.animateItem(fadeInSpec = tween(120), placementSpec = tween(120), fadeOutSpec = null)
                         when (item) {
-                            is FeedItem.Op -> OperationRow(item.row, onClick = { onOpen(item.row.id) }, modifier = animate)
+                            is FeedItem.Op -> OperationRow(item.row, onClick = { onOpen(item.row.id) }, modifier = animate, onDelete = { vm.onDelete(item.row.id) })
                             is FeedItem.Day -> DateRow(Format.dayTitle(item.date, state.today), animate)
                         }
                     }
@@ -142,7 +142,7 @@ private fun Header(state: JournalUiState, onForm: () -> Unit, onSearch: () -> Un
 }
 
 private fun todayLine(totals: List<TypeTotal>): String {
-    val spent = totals.filter { it.type == TxType.Expense.code && it.total != 0L }.sortedBy { it.currency }.map { Format.money(-it.total, it.currency) }
+    val spent = totals.filter { it.type == TxType.Expense.code && it.total != 0L }.sortedBy { it.currency }.map { Format.money(it.total, it.currency) }
     val refunded = totals.filter { it.type == TxType.Refund.code && it.total != 0L }.sortedBy { it.currency }.map { "${Texts.REFUNDED} ${Format.money(it.total, it.currency, withSign = true)}" }
     return (spent + refunded).takeIf { it.isNotEmpty() }?.joinToString(" · ") ?: Texts.TODAY_NOTHING
 }

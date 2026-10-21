@@ -177,7 +177,7 @@ fun OperationScreen(state: OperationUiState, vm: OperationViewModel, onBack: () 
                     ChoiceRow(Texts.REFUND_NONE, d.refundOf == null, { vm.onRefundOf(null) })
                     f.recentExpenses.forEach { tx ->
                         ChoiceRow(tx.description ?: tx.payee ?: names.categoryPath(tx.categoryId) ?: Texts.typeTitle(tx.type), d.refundOf == tx.id, { vm.onRefundOf(tx) },
-                            caption = Format.shortDate(tx.date, state.today) + " · " + Format.money(-tx.amountMinor, tx.currency))
+                            caption = Format.shortDate(tx.date, state.today) + " · " + Format.money(tx.amountMinor, tx.currency))
                     }
                 }
                 Errors(problemsOf(Problem.Field.RefundOf))

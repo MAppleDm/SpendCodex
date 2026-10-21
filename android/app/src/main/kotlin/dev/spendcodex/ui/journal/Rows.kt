@@ -4,10 +4,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import dev.spendcodex.Format
 import dev.spendcodex.Texts
 import dev.spendcodex.coreui.AppTheme
 import dev.spendcodex.coreui.LedgerRow
+import dev.spendcodex.coreui.SwipeToDelete
 import dev.spendcodex.data.db.FeedRow
 import dev.spendcodex.data.db.FeedSql
 import dev.spendcodex.data.domain.TxType
@@ -47,9 +51,12 @@ fun feedItems(rows: List<FeedRow>, headingFirst: Boolean = false): List<FeedItem
     return out
 }
 
-/** What a row says: the thing, then when, where and how much, the way it is easiest to remember. */
+/**
+ * What a row says: the thing, then when, where and how much, the way it is easiest to remember. With [onDelete] a swipe to
+ * the right deletes it (and TalkBack offers the same as an action).
+ */
 @Composable
-fun OperationRow(row: FeedRow, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun OperationRow(row: FeedRow, onClick: () -> Unit, modifier: Modifier = Modifier, onDelete: (() -> Unit)? = null) {
     val c = AppTheme.colors
     val type = TxType.of(row.type) ?: TxType.Expense
     val category = row.categoryName?.let { name -> row.parentName?.let { "$it › $name" } ?: name }
@@ -73,7 +80,7 @@ fun OperationRow(row: FeedRow, onClick: () -> Unit, modifier: Modifier = Modifie
     }.joinToString(" · ").ifEmpty { null }
 
     val amount = when (type) {
-        TxType.Expense -> Format.money(-row.amountMinor, row.currency)
+        TxType.Expense -> Format.money(row.amountMinor, row.currency)
         TxType.Income, TxType.Refund -> Format.money(row.amountMinor, row.currency, withSign = true)
         TxType.Transfer -> Format.money(row.amountMinor, row.currency)
         TxType.Adjustment -> Format.money(row.amountMinor, row.currency, withSign = true)
@@ -88,14 +95,18 @@ fun OperationRow(row: FeedRow, onClick: () -> Unit, modifier: Modifier = Modifie
         type == TxType.Transfer && row.toAmountMinor != null && row.toAccountCurrency != null -> "→ " + Format.money(row.toAmountMinor!!, row.toAccountCurrency!!)
         else -> null
     }
-    LedgerRow(
+    val line: @Composable (Modifier) -> Unit = { m -> LedgerRow(
         title = title,
         amount = amount,
         onClick = onClick,
-        modifier = modifier.testTag("operation"),
+        modifier = m.testTag("operation"),
         time = row.timeMin?.let { Format.time(LocalTime.of(it / 60, it % 60)) },
         caption = caption,
         amountColor = amountColor,
         amountCaption = amountCaption,
-    )
+    ) }
+    if (onDelete == null) line(modifier)
+    else SwipeToDelete(Texts.DELETE, onDelete, modifier) {
+        line(Modifier.semantics { customActions = listOf(CustomAccessibilityAction(Texts.DELETE) { onDelete(); true }) })
+    }
 }

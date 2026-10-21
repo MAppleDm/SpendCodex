@@ -94,6 +94,7 @@ private fun Pages(s: Screens) {
         s.operation.effects.collect { e ->
             if (e is OperationEffect.Close) {
                 if (e.recordedFromLine) s.journal.onFormRecorded()
+                if (e.recorded) s.journal.onRecorded()
                 s.nav.back()
             }
         }
