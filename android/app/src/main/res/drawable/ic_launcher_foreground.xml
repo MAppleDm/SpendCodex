@@ -1,14 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  A page of a journal: three ruled lines, the last one short, and a figure in its own column on the right.
-  White strokes on black, the family's two colours; 108dp canvas with the 66dp safe zone in the middle.
--->
+<!-- Family artwork: docs/icon.svg. Rounded 3.4dp strokes inside the 66dp safe circle. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-    <path android:strokeColor="#F2F2F2" android:strokeWidth="3.2" android:strokeLineCap="round"
-        android:pathData="M34,42 L60,42 M34,54 L60,54 M34,66 L52,66" />
-    <path android:strokeColor="#F2F2F2" android:strokeWidth="3.2" android:strokeLineCap="round"
-        android:pathData="M68,42 L74,42 M68,54 L74,54 M68,66 L74,66" />
-    <path android:strokeColor="#FF9F43" android:strokeWidth="3.2" android:strokeLineCap="round"
-        android:pathData="M34,30 L40,30" />
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#F2E0D4"
+        android:strokeColor="#B66A4B" android:strokeWidth="3.4"
+        android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M41,31 H67 Q71,31 71,35 V76 L65.3,72 L59.7,76 L54,72 L48.3,76 L42.7,72 L37,76 V35 Q37,31 41,31 Z" />
+    <path android:fillColor="#00000000"
+        android:strokeColor="#B66A4B" android:strokeWidth="3.4"
+        android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M45,43 H56 M63,43 H64 M45,51 H56 M63,51 H64" />
+    <path android:fillColor="#00000000"
+        android:strokeColor="#B66A4B" android:strokeWidth="3.4"
+        android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M45,62 H63" />
 </vector>

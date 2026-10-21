@@ -1,3 +1,5 @@
+<img src="docs/icon.svg" width="96" alt="SpendCodex app icon">
+
 # SpendCodex
 
 **English** · [Русский](README.ru.md) · [Download APK](https://github.com/MAppleDm/SpendCodex/releases/latest)
