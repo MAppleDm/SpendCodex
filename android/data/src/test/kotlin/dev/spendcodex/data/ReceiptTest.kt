@@ -160,6 +160,38 @@ class ReceiptTest {
         assertTrue(env.db.dao().allReceipts().isEmpty())
     }
 
+    @Test fun `a receipt split by category keeps the photo with every part, all of them or none`() = runTest {
+        val a = env.account("Card")
+        val shot = photo("")
+        val food = Draft(amount = "840.50", accountId = a, description = "продукты")
+        val home = Draft(amount = "450", accountId = a, description = "бытовая химия")
+        val bad = Draft(amount = "0", accountId = a, description = "ничего")
+        val refused = env.ledger.saveWithPhotos(listOf(food to listOf(shot.copyFor(food.id)), bad to listOf(shot.copyFor(bad.id))))
+        assertTrue(refused.single() is SaveResult.Invalid)
+        assertNull(env.ledger.get(food.id))
+
+        val items = listOf(food to listOf(shot.copyFor(food.id)), home to listOf(shot.copyFor(home.id)))
+        assertTrue(env.ledger.saveWithPhotos(items).all { it is SaveResult.Saved && it.created })
+        val receipts = listOf(food, home).map { env.ledger.receiptsOf(it.id).single() }
+        assertEquals(2, receipts.map { it.id }.distinct().size)
+        receipts.forEach { assertEquals(shot.receipt.sha256, it.sha256); assertArrayEquals(shot.bytes, env.ledger.receiptBytes(it.id)) }
+        // sent twice: nothing is stored again
+        assertTrue(env.ledger.saveWithPhotos(items).all { it is SaveResult.Saved && !it.created })
+        assertEquals(1, env.ledger.receiptsOf(food.id).size)
+    }
+
+    @Test fun `a photo is sent to DeepSeek no larger than it would make it, and a small one as it is`() {
+        val large = photo("tx").bytes!!
+        val image = Bitmap.createBitmap(1600, 2800, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.WHITE) }
+        val big = try { ReceiptImages.compress(image, 1, "tx", 0).bytes!! } finally { image.recycle() }
+        val sent = ReceiptImages.forReading(big)
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(sent, 0, sent.size, bounds)
+        assertTrue(bounds.outWidth.toLong() * bounds.outHeight <= ReceiptLimits.READ_PIXELS)
+        assertEquals(1600.0 / 2800, bounds.outWidth.toDouble() / bounds.outHeight, 0.01)
+        assertSame(large, ReceiptImages.forReading(large))
+    }
+
     @Test fun `invalid photo cannot partly save an operation or remove an existing photo`() = runTest {
         val d = journal()
         val old = env.ledger.get(d.id)

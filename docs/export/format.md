@@ -132,8 +132,8 @@ Operations at the same date and time keep a stable order: by `created_at`, then 
 | `note` | free text, may have several lines |
 | `tag_ids` | sorted list of tag ids |
 | `refund_of` | refunds only: the expense this money came back for, if linked |
-| `origin` | how the record was made: `line` (legacy local parser), `form`, `ai` (DeepSeek text entry, validated before saving), `repeat`, `reconcile` (legacy balance check) |
-| `input_text` | the line as the user typed it, when it came from the quick line or DeepSeek |
+| `origin` | how the record was made: `line` (legacy local parser), `form`, `ai` (DeepSeek text entry or a receipt photo, validated before saving), `repeat`, `reconcile` (legacy balance check) |
+| `input_text` | the line as the user typed it, when it came from the quick line or DeepSeek; null for a receipt photo, whose items are in `note` |
 
 ### Types
 

@@ -1,6 +1,7 @@
 package dev.spendcodex
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
@@ -10,6 +11,7 @@ import androidx.activity.viewModels
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.toArgb
+import androidx.core.content.IntentCompat
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -78,20 +80,35 @@ class MainActivity : FragmentActivity() {
         }
         // with the lock on the app's picture is not kept in the list of recent apps
         lifecycleScope.launch { lock.enabled.collect { hideInRecents(it) } }
-        if (savedInstanceState == null) takeSharedText(intent)
+        if (savedInstanceState == null) takeShared(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        takeSharedText(intent)
+        takeShared(intent)
     }
 
-    /** Text shared from another app ("Поделиться" → SpendCodex) lands in the quick line, ready to check and record. */
-    private fun takeSharedText(intent: Intent?) {
-        if (intent?.action != Intent.ACTION_SEND || intent.type?.startsWith("text/") != true) return
-        intent.getStringExtra(Intent.EXTRA_TEXT)?.let {
-            nav.home()
-            journal.onSharedText(it.take(2_000))
+    /**
+     * Shared from another app ("Поделиться" → SpendCodex): text lands in the quick line, ready to check and record; photos
+     * of receipts go to DeepSeek to read, as if taken here.
+     */
+    private fun takeShared(intent: Intent?) {
+        val type = intent?.type ?: return
+        when {
+            intent.action == Intent.ACTION_SEND && type.startsWith("text/") -> intent.getStringExtra(Intent.EXTRA_TEXT)?.let {
+                nav.home()
+                journal.onSharedText(it.take(2_000))
+            }
+            intent.action == Intent.ACTION_SEND && type.startsWith("image/") ->
+                IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)?.let {
+                    nav.home()
+                    journal.onPhotos(listOf(it))
+                }
+            intent.action == Intent.ACTION_SEND_MULTIPLE && type.startsWith("image/") ->
+                IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)?.let {
+                    nav.home()
+                    journal.onPhotos(it)
+                }
         }
     }
 

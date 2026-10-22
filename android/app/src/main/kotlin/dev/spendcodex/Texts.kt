@@ -21,8 +21,8 @@ object Texts {
     val INPUT_PLACEHOLDER get() = t("кофе 4.50", "coffee 4.50")
     val EMPTY_TITLE get() = t("Запиши первый расход.", "Record your first expense.")
     val EMPTY_HINT get() = t(
-        "Напиши, как было: «кофе 350», «вчера такси домой 820». DeepSeek разберёт расходы, выберет категории и теги. Одно нажатие — запись готова. Исправить её можно в ленте.",
-        "Write what happened: “coffee 4.50”, “taxi home 12 yesterday”. DeepSeek reads the expenses and chooses categories and tags. Send once to save. Tap a record to edit it.",
+        "Напиши, как было: «кофе 350», «вчера такси домой 820». DeepSeek разберёт расходы, выберет категории и теги. Одно нажатие — запись готова. Чек можно сфотографировать: камера слева от строки. Исправить запись можно в ленте.",
+        "Write what happened: “coffee 4.50”, “taxi home 12 yesterday”. DeepSeek reads the expenses and chooses categories and tags. Send once to save. Or photograph a receipt: the camera is left of the line. Tap a record to edit it.",
     )
     val TODAY get() = t("сегодня", "today")
     val YESTERDAY get() = t("вчера", "yesterday")
@@ -56,7 +56,7 @@ object Texts {
     val AI_AMOUNT_NOT_IN_TEXT get() = t("Этой суммы нет в тексте. Уточни расход или исправь сумму вручную.", "This amount is not in your text. Clarify the expense or correct the amount manually.")
     val AI_SEND get() = t("Записать через DeepSeek", "Record with DeepSeek")
     val AI_CONNECT get() = t("Настроить DeepSeek", "Set up DeepSeek")
-    val AI_CONNECT_HINT get() = t("Для ввода текстом нужен ключ DeepSeek.", "Text entry needs a DeepSeek key.")
+    val AI_CONNECT_HINT get() = t("Для разбора текста и чеков нужен ключ DeepSeek.", "Reading text and receipts needs a DeepSeek key.")
     val AI_INPUT_LONG get() = t("Слишком длинная запись. Раздели её на несколько сообщений.", "This note is too long. Split it into several messages.")
     val AI_EXPENSES_ONLY get() = t("Здесь записываем расходы. Доходы, переводы и остатки в журнал не добавлены. Возврат можно оформить из покупки.", "This journal records expenses. Income, transfers and balances were not added. Open a purchase to record its refund.")
     val AI_NEEDS_AMOUNT get() = t("Укажи сумму каждого расхода — DeepSeek не будет её угадывать.", "Add the amount of each expense. DeepSeek will not guess it.")
@@ -68,6 +68,24 @@ object Texts {
     fun aiUnknownCategory(name: String) = t("категории «$name» нет", "no category “$name”")
     fun aiFailed(detail: String) = t("DeepSeek не помог: $detail", "DeepSeek could not help: $detail")
     val AI_NO_KEY get() = t("Нет ключа DeepSeek: добавь его в настройках.", "No DeepSeek key: add it in settings.")
+
+    // receipt photos
+    val PHOTO_READ get() = t("Фото чека", "Receipt photo")
+    val PHOTO_HINT get() = t("Сфотографируй чек целиком и ровно. Длинный чек можно снять на несколько фото.",
+        "Photograph the whole receipt, straight on. A long receipt can take several photos.")
+    val PHOTO_READING get() = t("DeepSeek читает чек…", "DeepSeek is reading the receipt…")
+    val PHOTO_RESULT get() = t("Проверь чек перед записью", "Check the receipt before recording")
+    val PHOTO_UNREADABLE get() = t("Не получилось прочитать суммы. Сфотографируй чек ближе и ровнее или выбери другой снимок.",
+        "The amounts could not be read. Photograph the receipt closer and straighter, or choose another image.")
+    val PHOTO_NOT_PURCHASE get() = t("На фото не нашлось покупки. Сфотографируй чек или скриншот оплаты.",
+        "No purchase was found in the photo. Photograph a receipt or a payment screenshot.")
+    fun photoUnread(n: Int) = t("Фото $n не разобрано.", "Photo $n was not read.")
+    fun photosSkipped(n: Int) = t("Не удалось открыть фото: $n.", "Could not open photos: $n.")
+    val PHOTOS_LIMIT get() = t("Разобраны первые 10 фото.", "Only the first 10 photos were read.")
+    fun receiptLabel(payee: String?, n: Int) = payee?.let { t("Чек «$it»", "Receipt “$it”") } ?: t("Чек ${n + 1}", "Receipt ${n + 1}")
+    fun receiptMismatch(receipt: String, total: String) = t("$receipt: части не сходятся с итогом $total. Проверь суммы.",
+        "$receipt: the parts do not add up to the total $total. Check the amounts.")
+    fun receiptNoTotal(receipt: String) = t("$receipt: итог не найден. Проверь суммы.", "$receipt: no total found. Check the amounts.")
     val AI_AUTH get() = t("DeepSeek не принял ключ или на нём нет баланса.", "DeepSeek refused the key, or it has no balance.")
 
     fun issue(i: LineIssue): String = when (i) {
@@ -369,14 +387,16 @@ object Texts {
     val ERASE_HINT get() = t("Журнал хранится только здесь. Без резервной копии стёртое не вернуть.", "The journal is kept only here. Without a backup, erased data is gone.")
 
     // DeepSeek
-    val AI_TITLE get() = t("Разбор строки через DeepSeek", "Reading the line with DeepSeek")
+    val AI_TITLE get() = t("Разбор текста и чеков через DeepSeek", "Reading text and receipts with DeepSeek")
     val AI_EXPLAIN get() = t(
-        "Нажатие на стрелку отправляет твой текст в DeepSeek с твоим ключом. Модель выделяет расходы, выбирает категории и добавляет теги. " +
-            "После проверки записи сохраняются сразу; отмена доступна в ленте. Неоднозначный ответ потребует уточнения. " +
-            "Вместе с текстом отправляются текущая дата, часовой пояс, основная валюта, категории с ключевыми словами и названия тегов. История и фото чеков не отправляются. Нужны интернет и средства на API-аккаунте DeepSeek.",
-        "The send arrow submits your text to DeepSeek using your key. The model extracts expenses, chooses categories and adds tags. " +
-            "Validated records save immediately, with undo in the journal. Unclear answers need clarification. " +
-            "The request includes today's date, time zone, default currency, categories with keywords and tag names. Past records and receipt photos are not sent. Internet and a funded DeepSeek API account are required.",
+        "Нажатие на стрелку отправляет твой текст в DeepSeek (модель deepseek-flash) с твоим ключом. Модель выделяет расходы, выбирает категории и добавляет теги. " +
+            "После проверки записи сохраняются сразу; лишнюю запись можно смахнуть вправо. Неоднозначный ответ потребует уточнения. " +
+            "Фото чека, снятое камерой слева от строки или выбранное в галерее, тоже уходит в DeepSeek: чек делится по категориям и показывается для проверки перед записью. Фото уменьшается и отправляется без метаданных, а в записи хранится сжатая копия. " +
+            "Вместе с текстом или фото отправляются текущая дата, часовой пояс, основная валюта, категории с ключевыми словами и названия тегов. История не отправляется. Нужны интернет и средства на API-аккаунте DeepSeek.",
+        "The send arrow submits your text to DeepSeek (the deepseek-flash model) using your key. The model extracts expenses, chooses categories and adds tags. " +
+            "Validated records save immediately; swipe a mistaken one right to delete it. Unclear answers need clarification. " +
+            "A receipt photo, taken with the camera left of the line or chosen from the gallery, also goes to DeepSeek: the receipt is split by category and shown for a check before recording. The photo is sent downsized and without metadata; the record keeps a compressed copy. " +
+            "The request includes today's date, time zone, default currency, categories with keywords and tag names. Past records are not sent. Internet and a funded DeepSeek API account are required.",
     )
     val AI_KEY get() = t("Ключ DeepSeek", "DeepSeek key")
     val AI_GET_KEY get() = t("Получить ключ DeepSeek ↗", "Get a DeepSeek key ↗")

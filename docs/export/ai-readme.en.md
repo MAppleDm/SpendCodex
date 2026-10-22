@@ -38,15 +38,16 @@ The data is primary: nothing is recalculated, rounded or filled in with guesses.
    Do not convert `date` to UTC. `created_at`/`updated_at` are when the record was made and edited, not when money moved.
 5. **Categories.** An empty `category` means uncategorised, not "other". `parent_category` is the parent of a subcategory.
 6. **Limits.** Income and transfers may come from older versions; never count them as expenses. For `origin=ai`, categories
-   and some tags are model classifications, not independently established facts. `input_text` is the original note.
+   and some tags are model classifications, not independently established facts. `input_text` is the original note; a record read
+   from a receipt photo has none, and is one category's part of that receipt, its items in `note`.
    There may be gaps: do not invent missing operations and do not present estimates as facts.
 
 ## transactions.csv fields
 
 `id`, `date`, `time`, `time_zone`, `type`, `amount`, `currency`, `account`, `account_currency`, `account_amount`,
 `to_account`, `to_currency`, `to_amount`, `category`, `parent_category`, `description` (what it was), `payee` (who was paid or paid),
-`tags` (joined with "; "), `note`, `refund_of`, `origin` (how the record was made: `line` quick line, `form`, `ai` the line read by
-DeepSeek and validated by the app, `repeat`, `reconcile` a legacy balance check), `input_text` (what was typed), `created_at`, `updated_at`.
+`tags` (joined with "; "), `note`, `refund_of`, `origin` (how the record was made: `line` quick line, `form`, `ai` the line or a receipt
+photo read by DeepSeek and validated by the app, `repeat`, `reconcile` a legacy balance check), `input_text` (what was typed), `created_at`, `updated_at`.
 The `*_id` columns are stable ids that link the files.
 
 Text starting with `=`, `+`, `-` or `@` is prefixed with an apostrophe in CSV (to keep spreadsheets from running formulas);

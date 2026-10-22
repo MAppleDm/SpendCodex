@@ -18,7 +18,10 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
-/** Local JPEG compression, including all eight EXIF orientations. No image or metadata is sent anywhere. */
+/**
+ * Local JPEG compression, including all eight EXIF orientations. Metadata never leaves the phone; an image is sent only when
+ * the person asks DeepSeek to read it, and then as [forReading] makes it.
+ */
 object ReceiptImages {
     fun read(context: Context, uri: Uri, transactionId: String, now: Long): ReceiptPhoto {
         val temp = File.createTempFile("receipt-", ".source", context.cacheDir)
@@ -91,6 +94,29 @@ object ReceiptImages {
         } finally {
             flattened?.recycle()
             if (upright !== source) upright.recycle()
+        }
+    }
+
+    /**
+     * A stored receipt [bytes] as DeepSeek is sent it: at most [ReceiptLimits.READ_PIXELS], the size it would scale the
+     * image to itself, so the upload stays small and the text is not scaled twice. A small enough image goes as it is.
+     */
+    fun forReading(bytes: ByteArray): ByteArray {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        require(bounds.outWidth > 0 && bounds.outHeight > 0) { "not an image" }
+        val pixels = bounds.outWidth.toLong() * bounds.outHeight
+        if (pixels <= ReceiptLimits.READ_PIXELS) return bytes
+        val scale = sqrt(ReceiptLimits.READ_PIXELS.toDouble() / pixels)
+        val w = max(1, (bounds.outWidth * scale).toInt())
+        val h = max(1, (bounds.outHeight * scale).toInt())
+        val source = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: throw IOException("cannot decode image")
+        val small = Bitmap.createScaledBitmap(source, w, h, true)
+        try {
+            return ByteArrayOutputStream().also { check(small.compress(Bitmap.CompressFormat.JPEG, 90, it)) }.toByteArray()
+        } finally {
+            if (small !== source) small.recycle()
+            source.recycle()
         }
     }
 

@@ -1,8 +1,11 @@
 package dev.spendcodex.ui.journal
 
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.spendcodex.Format
 import dev.spendcodex.Texts
 import dev.spendcodex.data.ai.AiContext
@@ -20,11 +23,15 @@ import dev.spendcodex.data.domain.Filter
 import dev.spendcodex.data.domain.Origin
 import dev.spendcodex.data.domain.Transaction
 import dev.spendcodex.data.domain.TxType
+import dev.spendcodex.data.receipts.ReceiptImages
+import dev.spendcodex.data.receipts.ReceiptLimits
+import dev.spendcodex.data.receipts.ReceiptPhoto
 import dev.spendcodex.data.repo.Ledger
 import dev.spendcodex.data.repo.SaveResult
 import dev.spendcodex.data.settings.Lang
 import dev.spendcodex.data.settings.SecretStore
 import dev.spendcodex.data.settings.Settings
+import dev.spendcodex.ui.CameraCapture
 import dev.spendcodex.ui.Notice
 import dev.spendcodex.ui.Notices
 import java.time.Clock
@@ -53,19 +60,35 @@ sealed interface AiUi {
     data object Idle : AiUi
     data object Reading : AiUi
     data class Failed(val message: String, val retryable: Boolean, val needsKey: Boolean = false) : AiUi
-    /** Only uncertain answers stop here; an ordinary, validated expense saves in one step. */
-    data class Result(val items: List<AiItem>) : AiUi
+    /**
+     * Uncertain answers to a line stop here, and every receipt read from photos; an ordinary, validated line saves in one
+     * step. [notes]: what concerns the photos as a whole (one not read, a receipt whose parts do not add up).
+     */
+    data class Result(val items: List<AiItem>, val notes: List<String> = emptyList()) : AiUi
 }
 
-data class AiItem(val draft: Draft, val title: String, val amount: String, val warnings: List<String>, val problems: List<String>)
+/** One operation to record; from a receipt, with its items as [caption] and the [photos] it is to keep. */
+data class AiItem(
+    val draft: Draft, val title: String, val amount: String, val warnings: List<String>, val problems: List<String>,
+    val caption: String? = null, val photos: List<ReceiptPhoto> = emptyList(),
+)
 
+/**
+ * The line and what DeepSeek is doing with it. [fromPhotos]: DeepSeek is reading receipt photos instead, and the line stays
+ * as it is meanwhile; [photos] are those photos once prepared.
+ */
 data class ComposerState(
     val text: String = "",
     val batchId: String = UUID.randomUUID().toString(),
     val busy: Boolean = false,
     val saving: Boolean = false,
     val ai: AiUi = AiUi.Idle,
+    val fromPhotos: Boolean = false,
+    val photos: List<ReceiptPhoto> = emptyList(),
 )
+
+/** What the manual form starts from: the line, DeepSeek's single answer or the photos being read, attached. */
+data class FormStart(val draft: Draft, val photos: List<ReceiptPhoto>, val fromLine: Boolean)
 
 data class JournalUiState(
     val loaded: Boolean = false,
@@ -92,6 +115,7 @@ class JournalViewModel @Inject constructor(
     private val ai: AiReader,
     private val notices: Notices,
     private val clock: Clock,
+    @ApplicationContext private val context: Context,
 ) : ViewModel() {
     private val limit = MutableStateFlow(PAGE)
     private val today = MutableStateFlow(LocalDate.now(clock))
@@ -99,6 +123,7 @@ class JournalViewModel @Inject constructor(
     private val _effects = Channel<JournalEffect>(Channel.BUFFERED)
     val effects: Flow<JournalEffect> = _effects.receiveAsFlow()
     private var request: Job? = null
+    private val camera = CameraCapture(context)
 
     private val names = combine(ledger.accounts, ledger.categories, ledger.tags) { a, c, t -> Names(a, c, t) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, Names(emptyList(), emptyList(), emptyList()))
@@ -119,19 +144,25 @@ class JournalViewModel @Inject constructor(
     fun onText(text: String) {
         val old = composer.value
         if (old.text == text || old.saving) return
+        // photos are read whatever the line says
+        if (old.fromPhotos) { composer.update { it.copy(text = text) }; return }
         request?.cancel()
         composer.value = ComposerState(text = text)
     }
 
     fun onSharedText(text: String) = onText(text.trim())
 
-    /** No local interpretation: preserve the note, or start from a blocked AI draft. */
-    fun formDraft(): Draft {
+    /** No local interpretation: preserve the note, or start from a blocked AI draft; photos being read go along. */
+    fun formStart(): FormStart {
         val c = composer.value
-        val first = (c.ai as? AiUi.Result)?.items?.singleOrNull()?.draft
+        val item = (c.ai as? AiUi.Result)?.items?.singleOrNull()
         onAiClose()
-        return (first ?: Draft(description = c.text.trim(), currency = settings.choices.value.defaultCurrency))
-            .copy(id = UUID.randomUUID().toString(), type = TxType.Expense, origin = Origin.Form, inputText = c.text.trim().ifEmpty { null })
+        val id = UUID.randomUUID().toString()
+        val line = if (c.fromPhotos) null else c.text.trim().ifEmpty { null }
+        val draft = (item?.draft ?: Draft(description = line.orEmpty(), currency = settings.choices.value.defaultCurrency))
+            .copy(id = id, type = TxType.Expense, origin = Origin.Form, inputText = line)
+        val photos = (item?.photos ?: c.photos).take(ReceiptLimits.PER_OPERATION).map { it.copyFor(id) }
+        return FormStart(draft, photos, fromLine = line != null)
     }
 
     fun onFormRecorded() { composer.value = ComposerState() }
@@ -155,9 +186,7 @@ class JournalViewModel @Inject constructor(
                 val n = names.value
                 val choices = settings.choices.value
                 val default = ledger.defaultAccountId()
-                val ctx = AiContext(LocalDate.now(clock), clock.zone.id, Lang.en, n.categories,
-                    choices.defaultCurrency, n.tags.filter { !it.archived }.map { it.name })
-                val drafts = withContext(Dispatchers.IO) { ai.read(c.text, ctx) }
+                val drafts = withContext(Dispatchers.IO) { ai.read(c.text, aiContext(n)) }
                 if (composer.value.batchId != c.batchId) return@launch
                 val items = drafts.mapIndexed { index, d ->
                     val id = UUID.nameUUIDFromBytes("${c.batchId}:$index".toByteArray(Charsets.UTF_8)).toString()
@@ -168,26 +197,110 @@ class JournalViewModel @Inject constructor(
                     composer.update { it.copy(busy = false, ai = AiUi.Result(items)) }
                 } else save(items, c.batchId)
             } catch (e: CancellationException) { throw e }
-            catch (e: AiFailure) {
-                val message = when (e) {
-                    is AiFailure.NoKey -> Texts.AI_NO_KEY
-                    is AiFailure.Auth -> Texts.AI_AUTH
-                    is AiFailure.Input -> when (e.reason) {
-                        "unsupported" -> Texts.AI_EXPENSES_ONLY
-                        "needs_amount" -> Texts.AI_NEEDS_AMOUNT
-                        else -> Texts.AI_UNCLEAR
-                    }
-                    else -> Texts.aiFailed(e.detail)
-                }
-                if (composer.value.batchId == c.batchId) composer.update {
-                    it.copy(busy = false, saving = false, ai = AiUi.Failed(message, e.retryable, e is AiFailure.NoKey || e is AiFailure.Auth))
-                }
-            } catch (_: Exception) {
-                if (composer.value.batchId == c.batchId) composer.update {
-                    it.copy(busy = false, saving = false, ai = AiUi.Failed(Texts.OPERATION_SAVE_FAILED, true))
-                }
-            }
+            catch (e: Exception) { failed(c.batchId, e) }
         }
+    }
+
+    /** Photos of receipts, from the camera, the gallery or another app: DeepSeek reads them, the person checks and records. */
+    fun onPhotos(uris: List<Uri>, afterRead: () -> Unit = {}) {
+        val c = composer.value
+        if (uris.isEmpty() || c.busy || c.saving || c.ai is AiUi.Result) { afterRead(); return }
+        if (!secrets.hasKey.value) {
+            afterRead()
+            composer.update { it.copy(ai = AiUi.Failed(Texts.AI_NO_KEY, false, needsKey = true)) }
+            return
+        }
+        request?.cancel()
+        val batch = UUID.randomUUID().toString()
+        composer.update { it.copy(batchId = batch, busy = true, ai = AiUi.Reading, fromPhotos = true, photos = emptyList()) }
+        request = viewModelScope.launch {
+            val chosen = uris.take(AiReader.MAX_PHOTOS)
+            val photos = try {
+                withContext(Dispatchers.IO) {
+                    // bound to no record yet: each operation recorded from them gets copies of its own
+                    chosen.mapNotNull { uri ->
+                        try { ReceiptImages.read(context, uri, "", clock.millis()) }
+                        catch (e: CancellationException) { throw e }
+                        catch (e: Exception) { android.util.Log.w("Receipts", "Could not read a photo", e); null }
+                        catch (e: OutOfMemoryError) { android.util.Log.w("Receipts", "Photo too large", e); null }
+                    }.distinctBy { it.receipt.sha256 }
+                }
+            } finally { afterRead() }
+            if (composer.value.batchId != batch) return@launch
+            if (photos.isEmpty()) {
+                composer.update { it.copy(busy = false, ai = AiUi.Failed(Texts.RECEIPT_FAILED, false), fromPhotos = false) }
+                return@launch
+            }
+            composer.update { it.copy(photos = photos) }
+            val notes = listOfNotNull(
+                Texts.PHOTOS_LIMIT.takeIf { uris.size > chosen.size },
+                Texts.photosSkipped(chosen.size - photos.size).takeIf { photos.size < chosen.size },
+            )
+            readPhotos(batch, photos, notes)
+        }
+    }
+
+    private suspend fun readPhotos(batch: String, photos: List<ReceiptPhoto>, notes: List<String>) {
+        try {
+            val n = names.value
+            val choices = settings.choices.value
+            val default = ledger.defaultAccountId()
+            val drafts = withContext(Dispatchers.IO) { ai.readPhotos(photos.map { ReceiptImages.forReading(it.bytes!!) }, aiContext(n)) }
+            if (composer.value.batchId != batch) return
+            val items = drafts.mapIndexed { index, d ->
+                val id = UUID.nameUUIDFromBytes("$batch:$index".toByteArray(Charsets.UTF_8)).toString()
+                val draft = d.draft.copy(id = id, accountId = d.draft.accountId ?: default, currency = d.draft.currency ?: choices.defaultCurrency)
+                aiItem(d.copy(draft = draft), n, default)
+                    .copy(caption = draft.note.ifBlank { null }, photos = d.receipt?.photos.orEmpty().map { photos[it].copyFor(id) })
+            }
+            val receipts = drafts.mapNotNull { it.receipt?.let { r -> r to it.draft } }.distinctBy { it.first.index }
+            val checks = receipts.filter { !it.first.partsAddUp }.map { (r, d) ->
+                val label = Texts.receiptLabel(d.payee.ifBlank { null }, r.index)
+                val currency = d.currency ?: choices.defaultCurrency
+                r.total?.let { total ->
+                    val minor = currency?.let(Currencies::of)?.let { Decimal.parseHuman(total, it.exponent) }
+                    Texts.receiptMismatch(label, if (minor != null) Format.money(minor, currency) else total)
+                } ?: Texts.receiptNoTotal(label)
+            }
+            val read = receipts.flatMap { it.first.photos }.toSet()
+            val unread = photos.indices.filter { it !in read }.map { Texts.photoUnread(it + 1) }
+            composer.update { it.copy(busy = false, ai = AiUi.Result(items, notes + checks + unread)) }
+        } catch (e: CancellationException) { throw e }
+        catch (e: Exception) { failed(batch, e, Texts.RECEIPT_FAILED) }
+        catch (_: OutOfMemoryError) { failed(batch, IllegalStateException("out of memory"), Texts.RECEIPT_FAILED) }
+    }
+
+    fun cameraTarget(): Uri? = camera.target() ?: run {
+        composer.update { if (it.busy) it else it.copy(ai = AiUi.Failed(Texts.RECEIPT_CAMERA_FAILED, false)) }
+        null
+    }
+
+    fun onCameraResult(success: Boolean) {
+        val file = camera.taken(success) ?: return
+        onPhotos(listOf(Uri.fromFile(file))) { file.delete() }
+    }
+
+    private fun aiContext(n: Names) = AiContext(LocalDate.now(clock), clock.zone.id, Lang.en, n.categories,
+        settings.choices.value.defaultCurrency, n.tags.filter { !it.archived }.map { it.name })
+
+    /** What went wrong, for the panel above the line; [fallback] for a failure that is not DeepSeek's. */
+    private fun failed(batch: String, e: Exception, fallback: String = Texts.OPERATION_SAVE_FAILED) {
+        val ai = if (e is AiFailure) {
+            val message = when (e) {
+                is AiFailure.NoKey -> Texts.AI_NO_KEY
+                is AiFailure.Auth -> Texts.AI_AUTH
+                is AiFailure.Input -> when (e.reason) {
+                    "unsupported" -> Texts.AI_EXPENSES_ONLY
+                    "needs_amount" -> Texts.AI_NEEDS_AMOUNT
+                    "unreadable" -> Texts.PHOTO_UNREADABLE
+                    "not_a_purchase" -> Texts.PHOTO_NOT_PURCHASE
+                    else -> Texts.AI_UNCLEAR
+                }
+                else -> Texts.aiFailed(e.detail)
+            }
+            AiUi.Failed(message, e.retryable, e is AiFailure.NoKey || e is AiFailure.Auth)
+        } else AiUi.Failed(fallback, true)
+        if (composer.value.batchId == batch) composer.update { it.copy(busy = false, saving = false, ai = ai) }
     }
 
     private fun aiItem(a: AiDraft, n: Names, default: String?): AiItem {
@@ -208,31 +321,42 @@ class JournalViewModel @Inject constructor(
         val warnings = buildList {
             a.unknownCategory?.let { add(Texts.aiUnknownCategory(it)) }
         }
-        val title = listOfNotNull(a.draft.description.ifBlank { null } ?: Texts.typeTitle(a.draft.type),
-            n.categoryPath(a.draft.categoryId), a.draft.date?.let { Format.shortDate(it, today.value) }).joinToString(" · ")
+        val description = a.draft.description.ifBlank { null } ?: Texts.typeTitle(a.draft.type)
+        val category = n.categoryPath(a.draft.categoryId)?.takeIf { !it.equals(description, ignoreCase = true) }
+        val title = listOfNotNull(description, category, a.draft.payee.ifBlank { null }?.takeIf { a.receipt != null },
+            a.draft.date?.let { Format.shortDate(it, today.value) }).joinToString(" · ")
         return AiItem(a.draft, title, amount, warnings, problems.distinct())
     }
 
     private suspend fun save(items: List<AiItem>, batchId: String) {
         composer.update { it.copy(busy = true, saving = true) }
-        val results = ledger.saveAll(items.map { it.draft })
+        val results = if (items.any { it.photos.isNotEmpty() }) ledger.saveWithPhotos(items.map { it.draft to it.photos })
+            else ledger.saveAll(items.map { it.draft })
         val invalid = results.singleOrNull() as? SaveResult.Invalid
         if (invalid != null) {
             val updated = items.mapIndexed { i, item -> if (i == invalid.index) item.copy(problems = invalid.problems.map(Texts::problem)) else item }
             composer.update { it.copy(busy = false, saving = false, ai = AiUi.Result(updated)) }
             return
         }
-        if (composer.value.batchId == batchId) composer.value = ComposerState()
+        // after photos the line is kept: it was not part of what was recorded
+        composer.update { if (it.batchId != batchId) it else if (it.fromPhotos) ComposerState(text = it.text) else ComposerState() }
         // the new rows are the confirmation; a mistaken one is swiped away
         if (results.any { it is SaveResult.Saved && it.created }) _effects.trySend(JournalEffect.Recorded)
     }
 
-    fun onAiRetry() { onSend() }
+    fun onAiRetry() {
+        val c = composer.value
+        if (!c.fromPhotos) { onSend(); return }
+        if (c.busy || c.photos.isEmpty()) return
+        request?.cancel()
+        composer.update { it.copy(busy = true, ai = AiUi.Reading) }
+        request = viewModelScope.launch { readPhotos(c.batchId, c.photos, emptyList()) }
+    }
 
     fun onAiClose() {
         if (composer.value.saving) return
         request?.cancel()
-        composer.update { it.copy(busy = false, ai = AiUi.Idle) }
+        composer.update { if (it.fromPhotos) ComposerState(text = it.text) else it.copy(busy = false, ai = AiUi.Idle) }
     }
 
     fun onAiRecord() {
@@ -274,6 +398,8 @@ class JournalViewModel @Inject constructor(
     }
     fun dismissNotice(id: Long) = notices.dismiss(id)
     fun onForeground() { today.value = LocalDate.now(clock) }
+
+    override fun onCleared() { camera.clear(); super.onCleared() }
 
     companion object {
         const val PAGE = 200

@@ -211,28 +211,46 @@ class Ledger @Inject constructor(
         return db.withTransaction {
             val result = saveAll(listOf(draft)).single()
             if (result !is SaveResult.Saved) return@withTransaction result
-            val old = dao.receiptsOf(result.tx.id)
-            val next = photos.mapIndexed { i, p -> p.receipt.copy(sort = i) }
-            require(next.size <= ReceiptLimits.PER_OPERATION && next.map { it.id }.distinct().size == next.size)
-            require(next.map { it.sha256 }.distinct().size == next.size)
-            require(next.all { it.transactionId == result.tx.id })
-            if (old == next) return@withTransaction result
-            // Validate and collect at most ten bounded blobs before removing any old links.
-            val rows = photos.mapIndexed { i, photo ->
-                val meta = next[i]
-                val bytes = photo.bytes ?: run {
-                    require(old.any { it.id == meta.id && it.copy(sort = meta.sort) == meta })
-                    checkNotNull(dao.receiptBytes(meta.id))
-                }
-                require(ReceiptImages.valid(bytes, meta)) { "invalid receipt" }
-                meta.toEntity(bytes)
-            }
-            dao.clearReceipts(result.tx.id)
-            rows.forEach { dao.insertReceipt(it) }
-            val tx = result.tx.copy(updatedAt = clock.millis())
-            dao.upsertTransaction(tx.toEntity())
-            result.copy(tx = tx)
+            putReceipts(result, photos)
         }
+    }
+
+    /**
+     * New records with their receipt photos, all of them or none: a receipt split by category, each part with the photos.
+     * A record already stored (sent twice) keeps the photos it was stored with.
+     */
+    suspend fun saveWithPhotos(items: List<Pair<Draft, List<ReceiptPhoto>>>): List<SaveResult> = db.withTransaction {
+        val results = saveAll(items.map { it.first })
+        if (results.any { it is SaveResult.Invalid }) return@withTransaction results
+        results.mapIndexed { i, r ->
+            val saved = r as SaveResult.Saved
+            if (!saved.created || items[i].second.isEmpty()) saved else putReceipts(saved, items[i].second)
+        }
+    }
+
+    /** Makes [photos] the receipts of the record just saved, in their order; called inside the transaction that saved it. */
+    private suspend fun putReceipts(result: SaveResult.Saved, photos: List<ReceiptPhoto>): SaveResult.Saved {
+        val old = dao.receiptsOf(result.tx.id)
+        val next = photos.mapIndexed { i, p -> p.receipt.copy(sort = i) }
+        require(next.size <= ReceiptLimits.PER_OPERATION && next.map { it.id }.distinct().size == next.size)
+        require(next.map { it.sha256 }.distinct().size == next.size)
+        require(next.all { it.transactionId == result.tx.id })
+        if (old == next) return result
+        // Validate and collect at most ten bounded blobs before removing any old links.
+        val rows = photos.mapIndexed { i, photo ->
+            val meta = next[i]
+            val bytes = photo.bytes ?: run {
+                require(old.any { it.id == meta.id && it.copy(sort = meta.sort) == meta })
+                checkNotNull(dao.receiptBytes(meta.id))
+            }
+            require(ReceiptImages.valid(bytes, meta)) { "invalid receipt" }
+            meta.toEntity(bytes)
+        }
+        dao.clearReceipts(result.tx.id)
+        rows.forEach { dao.insertReceipt(it) }
+        val tx = result.tx.copy(updatedAt = clock.millis())
+        dao.upsertTransaction(tx.toEntity())
+        return result.copy(tx = tx)
     }
 
     /**

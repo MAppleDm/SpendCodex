@@ -82,6 +82,20 @@ fun FormIcon(color: Color, modifier: Modifier = Modifier) = Canvas(modifier.size
     line(color, 0.73f, 0.52f, 0.73f, 0.82f)
 }
 
+/** A camera: photographing a receipt for DeepSeek to read. */
+@Composable
+fun CameraIcon(color: Color, modifier: Modifier = Modifier) = Canvas(modifier.size(24.dp)) {
+    val w = size.width
+    val body = Path().apply {
+        moveTo(w * 0.14f, w * 0.34f); lineTo(w * 0.32f, w * 0.34f)
+        lineTo(w * 0.39f, w * 0.23f); lineTo(w * 0.61f, w * 0.23f)
+        lineTo(w * 0.68f, w * 0.34f); lineTo(w * 0.86f, w * 0.34f)
+        lineTo(w * 0.86f, w * 0.79f); lineTo(w * 0.14f, w * 0.79f); close()
+    }
+    drawPath(body, color, style = stroke())
+    drawCircle(color, w * 0.14f, Offset(w * 0.5f, w * 0.56f), style = stroke())
+}
+
 @Composable
 fun BackIcon(color: Color, modifier: Modifier = Modifier) = Canvas(modifier.size(24.dp)) {
     val w = size.width

@@ -102,8 +102,8 @@ private fun Pages(s: Screens) {
     LaunchedEffect(Unit) { s.categories.closed.collect { s.nav.back() } }
 
     fun newOperation() {
-        val fromLine = journal.composer.text.isNotBlank()
-        s.nav.push(Screen.Operation(OperationRequest.New(s.journal.formDraft()), fromLine))
+        val start = s.journal.formStart()
+        s.nav.push(Screen.Operation(OperationRequest.New(start.draft, start.photos), start.fromLine))
     }
 
     // back closes the innermost thing first: a list of choices, DeepSeek's answer, then the page

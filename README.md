@@ -4,16 +4,17 @@
 
 **English** · [Русский](README.ru.md) · [Download APK](https://github.com/MAppleDm/SpendCodex/releases/latest)
 
-An expense journal with DeepSeek text entry. From the same family as [FatCodex](https://github.com/MAppleDm/FatCodex).
+An expense journal with DeepSeek text and receipt-photo entry. From the same family as [FatCodex](https://github.com/MAppleDm/FatCodex).
 
-Write **“coffee 4.50, taxi home 12 yesterday”** and send. DeepSeek extracts expenses, chooses categories and adds useful
-tags. Validated records save immediately. Swipe a record right to delete it; tap it to edit. No chat or analytics dashboard.
+Write **“coffee 4.50, taxi home 12 yesterday”** and send, or photograph a receipt. DeepSeek extracts expenses, chooses
+categories and adds useful tags. Validated records save immediately. Swipe a record right to delete it; tap it to edit.
+No chat or analytics dashboard.
 
 ## Get started
 
 1. Choose your default currency, used when the note does not name one.
 2. Tap **Set up DeepSeek** and save your API key. A link to obtain a key is on that screen.
-   Text entry needs internet and a funded DeepSeek API account.
+   Text and photo entry need internet and a funded DeepSeek API account.
 3. Type naturally and send with the arrow or Enter. Typing alone never sends a request.
 
 Examples: `coffee 4.50`, `taxi 12 yesterday`, `groceries 32.90 EUR`, `lunch 15 #work`, `coffee 4.50, bread 3`.
@@ -39,7 +40,14 @@ Search combines text, dates, categories, tags and currencies, and can export its
 
 ## Receipts
 
-Open a record, then **Receipt photos → Camera / From gallery**, up to 10 photos. Images are compressed on the phone;
+**Photograph a receipt**: the camera icon left of the input line → **Camera** or **From gallery** (up to 10 photos; a long
+receipt can take several), or share photos to SpendCodex from the gallery. DeepSeek reads each receipt and splits it by
+category: a supermarket receipt becomes, say, “groceries 840.50” and “household 450”, each with the shop, the date and
+time on the receipt, the items in the note and the photo attached. You check the result and tap **Record**. If the
+parts do not add up to the receipt's total, or a photo was not read, it says so before you record. Photos go to DeepSeek
+downsized and without metadata.
+
+To attach photos by hand, open a record, then **Receipt photos → Camera / From gallery**, up to 10 photos. Images are compressed on the phone;
 gallery originals stay intact. Tap a thumbnail to zoom. Photo changes apply on save and removal has undo.
 Repeating a purchase does not duplicate its old receipt.
 

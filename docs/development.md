@@ -34,13 +34,14 @@ JVM only (Robolectric with real SQLite), no emulator needed. What they cover:
 | `QuickLineTest` | the line grammar in Russian and English: amounts, currencies, dates, accounts, transfers, refunds, tags, notes, splitting, ambiguities |
 | `LedgerTest` | records on the real database: defaults, balances, multi-currency, transfers, idempotent save, edit without change, delete + undo, tags, archiving, foreign keys, search and combined filters (account names not searched), order of same-minute records, repeat, refund, reconcile, seed with one hidden account, a record always finding an account, reopening the database |
 | `BackupTest` | export → restore → export is identical; bare JSON; archive layout and checksums; exact amount strings; CSV quoting and formula guard; the AI package; damaged, foreign, newer, partial and inconsistent files refused with nothing changed; 50 000 operations |
-| `ReceiptTest` | real JPEG compression and all EXIF orientations; originals; atomic save/delete/undo; duplicates and limits; exact photo round-trips and safety copies; missing/damaged/oversized/unsafe archives; staging-loss rollback; v1 JSON/ZIP compatibility |
+| `ReceiptTest` | real JPEG compression and all EXIF orientations; originals; atomic save/delete/undo; a receipt split by category saved with its photo on every part, all or nothing; the downsized copy sent to DeepSeek; duplicates and limits; exact photo round-trips and safety copies; missing/damaged/oversized/unsafe archives; staging-loss rollback; v1 JSON/ZIP compatibility |
 | `ReceiptFlowTest` | gallery and camera output, duplicate selection, viewer, removal/undo, pending changes and abandonment; optional screenshots via `-Pscreenshots=../docs/screenshots` |
-| `AiReaderTest` | the forced DeepSeek tool, expense-only schema, generated tags and vocabulary, exact amounts, malformed batches, truncation, invalid fields, errors and redacted keys |
+| `AiReaderTest` | the forced DeepSeek tool, expense-only schema, generated tags and vocabulary, exact amounts, malformed batches, truncation, invalid fields, errors and redacted keys; photos as images with `record_receipts`, parts per category, totals that do not add up, wrong photo numbers, unreadable/non-purchase/refund photos |
 | `PaletteTest` | every palette (black & white, avocado; light and dark) keeps text at WCAG 4.5:1; the black & white look is unchanged; the choice persists and survives erasing |
 | `MigrationTest` | a database built from the exported v1 schema opens with today's app |
 | `JournalFlowTest` | secondary manual entry, expense-only feed/totals, legacy data preserved and editable, old income searchable explicitly |
 | `AiFlowTest` | primary DeepSeek input, automatic save and tags without an undo line, swipe-right delete and bring back, batch atomicity, currencies, no-key state, income rejection, network retry, cancellation and duplicate taps |
+| `PhotoFlowTest` | a receipt photo read, split by category, checked and recorded with the photo on every part while the line stays; parts that do not add up and unread photos flagged; dropping records nothing; an unreadable photo opens the form with it attached; no key, no upload |
 
 ## Layout
 
@@ -68,7 +69,8 @@ See [decisions.md](decisions.md).
 ## DeepSeek input contract (0.3)
 
 Every explicit send uses `deepseek-flash` at `/chat/completions`, with thinking disabled and the forced
-`record_operations` tool. The model name and endpoint match the [official API guide](https://api-docs.deepseek.com/).
+`record_operations` tool; receipt photos use the same model with the forced `record_receipts` tool and the images as
+base64 `image_url` parts of the user message (see [the vision guide](https://api-docs.deepseek.com/guides/vision)). The model name and endpoint match the [official API guide](https://api-docs.deepseek.com/).
 The key is provided by the user; tests use MockWebServer, never a paid account. The original typed note is retained in
 `input_text`, with `origin=ai`. Categories and generated tags are classifications, not additional financial facts.
 

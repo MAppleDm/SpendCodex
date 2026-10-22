@@ -46,7 +46,7 @@ class AppEnv(language: Language = Language.Ru, modelUrl: String = "http://127.0.
     val backups = Backups(context, db, ledger, settings, clock, docs, "0.1.0")
     val ai = AiReader(OkHttpClient(), modelUrl, key = { secrets.deepseekKey })
 
-    fun journal() = JournalViewModel(ledger, settings, secrets, ai, notices, clock)
+    fun journal() = JournalViewModel(ledger, settings, secrets, ai, notices, clock, context)
     fun operation() = OperationViewModel(ledger, settings, notices, clock, context)
     fun search() = SearchViewModel(ledger, clock)
 

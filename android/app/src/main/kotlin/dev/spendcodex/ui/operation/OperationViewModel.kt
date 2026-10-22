@@ -2,7 +2,6 @@ package dev.spendcodex.ui.operation
 
 import android.content.Context
 import android.net.Uri
-import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -23,6 +22,7 @@ import dev.spendcodex.data.receipts.ReceiptImages
 import dev.spendcodex.data.receipts.ReceiptLimits
 import dev.spendcodex.data.settings.Lang
 import dev.spendcodex.data.settings.Settings
+import dev.spendcodex.ui.CameraCapture
 import dev.spendcodex.ui.Notice
 import dev.spendcodex.ui.Notices
 import dev.spendcodex.ui.OperationRequest
@@ -31,7 +31,6 @@ import java.time.Clock
 import java.time.LocalDate
 import java.time.ZonedDateTime
 import java.util.UUID
-import java.io.File
 import javax.inject.Inject
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -97,7 +96,7 @@ class OperationViewModel @Inject constructor(
     private val form = MutableStateFlow(FormState())
     private val _effects = Channel<OperationEffect>(Channel.BUFFERED)
     val effects: Flow<OperationEffect> = _effects.receiveAsFlow()
-    private var cameraFile: File? = null
+    private val camera = CameraCapture(context)
     private var cameraKey: String? = null
 
     private val names = combine(ledger.accounts, ledger.categories, ledger.tags) { a, c, t -> Names(a, c, t) }
@@ -113,7 +112,7 @@ class OperationViewModel @Inject constructor(
         form.value = FormState(key = key, loading = true, fromLine = fromLine)
         viewModelScope.launch {
             when (request) {
-                is OperationRequest.New -> load(key, request.draft, null)
+                is OperationRequest.New -> load(key, request.draft, null, request.photos)
                 is OperationRequest.Edit -> {
                     val tx = ledger.get(request.id)
                     if (tx == null) {
@@ -127,10 +126,10 @@ class OperationViewModel @Inject constructor(
         }
     }
 
-    private suspend fun load(key: String, draft: Draft, existing: Transaction?) {
+    private suspend fun load(key: String, draft: Draft, existing: Transaction?, newPhotos: List<ReceiptPhoto> = emptyList()) {
         val recent = ledger.recentExpenses(40)
         val target = draft.refundOf?.let { ledger.get(it) }
-        val photos = existing?.let { tx -> ledger.receiptsOf(tx.id).map { ReceiptPhoto(it) } }.orEmpty()
+        val photos = existing?.let { tx -> ledger.receiptsOf(tx.id).map { ReceiptPhoto(it) } } ?: newPhotos
         form.update {
             if (it.key != key) it else it.copy(
                 loading = false,
@@ -294,23 +293,15 @@ class OperationViewModel @Inject constructor(
 
     fun photoError(message: String) = form.update { it.copy(photoMessage = message) }
 
-    fun cameraTarget(): Uri? = try {
-        cameraFile?.delete()
-        val dir = File(context.cacheDir, "camera").also { check(it.isDirectory || it.mkdirs()) }
-        val file = File.createTempFile("receipt-", ".jpg", dir)
-        cameraFile = file
+    fun cameraTarget(): Uri? {
+        val uri = camera.target() ?: run { photoError(Texts.RECEIPT_CAMERA_FAILED); return null }
         cameraKey = form.value.key
-        FileProvider.getUriForFile(context, "${context.packageName}.files", file)
-    } catch (e: Exception) {
-        cameraFile?.delete(); cameraFile = null
-        android.util.Log.w("Receipts", "Could not prepare camera output", e)
-        photoError(Texts.RECEIPT_CAMERA_FAILED); null
+        return uri
     }
 
     fun onCameraResult(success: Boolean) {
-        val file = cameraFile ?: return
-        cameraFile = null
-        if (!success || cameraKey != form.value.key) { file.delete(); return }
+        val file = camera.taken(success) ?: return
+        if (cameraKey != form.value.key) { file.delete(); return }
         // Keep the camera file until compression has finished opening it.
         val f = form.value
         if (f.photoBusy || f.busy || f.photos.size >= ReceiptLimits.PER_OPERATION) { file.delete(); return }
@@ -328,5 +319,5 @@ class OperationViewModel @Inject constructor(
         }
     }
 
-    override fun onCleared() { cameraFile?.delete(); super.onCleared() }
+    override fun onCleared() { camera.clear(); super.onCleared() }
 }

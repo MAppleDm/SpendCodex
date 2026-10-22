@@ -170,6 +170,82 @@ class AiReaderTest {
         try { reader.read("кофе 4.50", ctx); fail() } catch (e: AiFailure.BadOutput) { assertEquals("incomplete answer", e.detail) }
     }
 
+    // ---------- receipt photos ----------
+
+    private fun receipts(arguments: String, tool: String = "record_receipts") = MockResponse().setResponseCode(200).setBody(
+        """{"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"1","type":"function",
+           "function":{"name":"$tool","arguments":${Json.encodeToString(kotlinx.serialization.json.JsonPrimitive.serializer(), kotlinx.serialization.json.JsonPrimitive(arguments))}}}]}}]}""",
+    )
+    private val photoA = byteArrayOf(-1, -40, -1, 1, 2, 3)
+    private val photoB = byteArrayOf(-1, -40, -1, 4, 5, 6)
+    private val shop = """{"photos":[0,1],"payee":"Пятёрочка","date":"2026-10-19","time":"18:40","currency":"RUB","total":"1290.50","parts":[
+        {"amount":"840.50","category":"Кафе","description":"кофе и выпечка","items":["Кофе 3в1 340.50","Круассан 500.00"],"tags":["кофе"]},
+        {"amount":"450","category":null,"description":"бытовая химия","items":["Средство для посуды 450.00"],"tags":["дом"]}]}"""
+
+    @Test
+    fun `photos go as images with the receipt function forced, and come back split by category with their photos`() = runTest {
+        server.enqueue(receipts("""{"status":"ok","receipts":[$shop]}"""))
+        val drafts = reader.readPhotos(listOf(photoA, photoB), ctx)
+        val body = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
+        assertEquals("deepseek-flash", body["model"]!!.jsonPrimitive.content)
+        assertEquals("record_receipts", body["tool_choice"]!!.jsonObject["function"]!!.jsonObject["name"]!!.jsonPrimitive.content)
+        assertEquals("disabled", body["thinking"]!!.jsonObject["type"]!!.jsonPrimitive.content)
+        // images only in the user's message, in the order chosen, each after its number
+        val content = body["messages"]!!.jsonArray[1].jsonObject["content"]!!.jsonArray
+        val images = content.filter { it.jsonObject["type"]!!.jsonPrimitive.content == "image_url" }
+            .map { it.jsonObject["image_url"]!!.jsonObject["url"]!!.jsonPrimitive.content }
+        assertEquals(listOf(photoA, photoB).map { "data:image/jpeg;base64," + java.util.Base64.getEncoder().encodeToString(it) }, images)
+        assertTrue(content.toString().contains("photo 1"))
+        assertTrue(content[0].jsonObject["text"]!!.jsonPrimitive.content.contains("\"Кафе\""))
+        assertFalse(body["messages"]!!.jsonArray[0].toString().contains("image_url"))
+        // no payment methods either way: none is sent, none asked for
+        assertFalse(content[0].jsonObject["text"]!!.jsonPrimitive.content.contains("accounts"))
+        assertFalse(body["tools"].toString().contains("\"account\""))
+
+        assertEquals(2, drafts.size)
+        val (cafe, home) = drafts
+        assertEquals("840.50", cafe.draft.amount)
+        assertEquals("cafe", cafe.draft.categoryId)
+        assertEquals("Пятёрочка", cafe.draft.payee)
+        assertEquals("RUB", cafe.draft.currency)
+        assertEquals(LocalDate.of(2026, 10, 19), cafe.draft.date)
+        assertEquals(DraftTime.At(LocalTime.of(18, 40)), cafe.draft.time)
+        assertEquals("Кофе 3в1 340.50; Круассан 500.00", cafe.draft.note)
+        assertEquals(Origin.Ai, cafe.draft.origin)
+        assertNull(cafe.draft.inputText)
+        assertEquals(AiReceipt(0, listOf(0, 1), "1290.50", partsAddUp = true), cafe.receipt)
+        assertTrue(cafe.amountInText)
+        assertNull(home.draft.categoryId)
+        assertEquals("Пятёрочка", home.draft.payee)
+        assertEquals(cafe.receipt, home.receipt)
+    }
+
+    @Test
+    fun `a receipt that does not add up or has no total is marked, a wrong photo number refuses the answer`() = runTest {
+        server.enqueue(receipts("""{"status":"ok","receipts":[${shop.replace("\"1290.50\"", "\"1300.00\"")}]}"""))
+        assertFalse(reader.readPhotos(listOf(photoA, photoB), ctx).all { it.receipt!!.partsAddUp })
+        server.enqueue(receipts("""{"status":"ok","receipts":[${shop.replace("\"1290.50\"", "null")}]}"""))
+        reader.readPhotos(listOf(photoA, photoB), ctx).forEach { assertNull(it.receipt!!.total); assertFalse(it.receipt!!.partsAddUp) }
+        for (bad in listOf(shop.replace("[0,1]", "[0,2]"), shop.replace("[0,1]", "[]"), shop.replace("[0,1]", "[\"0\"]"), shop.replace("\"items\":[\"Средство", "\"items\":[1,\"Средство"))) {
+            server.enqueue(receipts("""{"status":"ok","receipts":[$bad]}"""))
+            try { reader.readPhotos(listOf(photoA, photoB), ctx); fail(bad) } catch (_: AiFailure.BadOutput) { }
+        }
+        // the line's function is not an answer about photos
+        server.enqueue(receipts("""{"status":"ok","receipts":[$shop]}""", tool = "record_operations"))
+        try { reader.readPhotos(listOf(photoA, photoB), ctx); fail() } catch (_: AiFailure.BadOutput) { }
+    }
+
+    @Test
+    fun `unreadable photos, photos without a purchase and refund receipts are refused with their reason`() = runTest {
+        for (status in listOf("unreadable", "not_a_purchase", "unsupported")) {
+            server.enqueue(receipts("""{"status":"$status","receipts":[]}"""))
+            try { reader.readPhotos(listOf(photoA), ctx); fail(status) } catch (e: AiFailure.Input) { assertEquals(status, e.reason) }
+        }
+        key = null
+        try { reader.readPhotos(listOf(photoA), ctx); fail() } catch (_: AiFailure.NoKey) { }
+        assertEquals(3, server.requestCount)
+    }
+
     @Suppress("unused")
     private fun JsonObject.str(k: String) = this[k]!!.jsonPrimitive.content
 }

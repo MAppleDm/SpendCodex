@@ -1,6 +1,15 @@
 package dev.spendcodex.ui.journal
 
+import android.content.ActivityNotFoundException
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,10 +31,17 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
@@ -34,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import dev.spendcodex.Format
 import dev.spendcodex.Texts
 import dev.spendcodex.coreui.AppTheme
+import dev.spendcodex.coreui.CameraIcon
 import dev.spendcodex.coreui.DateRow
 import dev.spendcodex.coreui.FeedNote
 import dev.spendcodex.coreui.FormIcon
@@ -46,13 +63,21 @@ import dev.spendcodex.coreui.PanelTitle
 import dev.spendcodex.coreui.SearchIcon
 import dev.spendcodex.coreui.TextAction
 import dev.spendcodex.coreui.rememberGlow
+import dev.spendcodex.data.ai.AiReader
 import dev.spendcodex.data.db.TypeTotal
 import dev.spendcodex.data.domain.TxType
+import dev.spendcodex.data.receipts.ReceiptImages
+import dev.spendcodex.data.receipts.ReceiptPhoto
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.withContext
 
-/** Expenses, a daily total, and one text input. Manual entry lives beside search in the header; a swipe right deletes a record. */
+/**
+ * Expenses, a daily total, and one text input with the receipt camera before it. Manual entry lives beside search in the
+ * header; a swipe right deletes a record.
+ */
 @Composable
 fun JournalScreen(
     state: JournalUiState,
@@ -67,6 +92,10 @@ fun JournalScreen(
 ) {
     val listState = rememberLazyListState()
     val haptic = LocalHapticFeedback.current
+    var choosing by remember { mutableStateOf(false) }
+    val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(AiReader.MAX_PHOTOS)) { vm.onPhotos(it) }
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture(), vm::onCameraResult)
+    val canPhoto = !state.composer.busy && !state.composer.saving && state.composer.ai !is AiUi.Result
     LaunchedEffect(effects) {
         effects.collect {
             haptic.performHapticFeedback(HapticFeedbackType.Confirm)
@@ -109,6 +138,29 @@ fun JournalScreen(
             }
         }
         AiPanel(state.composer, vm, onForm, onAi)
+        if (choosing && canPhoto) {
+            Column(Modifier.fillMaxWidth().testTag("photo-choice")) {
+                Hairline()
+                Text(Texts.PHOTO_HINT, style = AppTheme.type.caption, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
+                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+                    TextAction(Texts.RECEIPT_CAMERA, {
+                        choosing = false
+                        vm.cameraTarget()?.let { uri ->
+                            try { camera.launch(uri) }
+                            catch (_: ActivityNotFoundException) { vm.onCameraResult(false) }
+                            catch (_: SecurityException) { vm.onCameraResult(false) }
+                        }
+                    }, Modifier.testTag("photo-camera"))
+                    TextAction(Texts.RECEIPT_GALLERY, {
+                        choosing = false
+                        try { gallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+                        catch (_: ActivityNotFoundException) { }
+                    }, Modifier.testTag("photo-gallery"))
+                    Spacer(Modifier.weight(1f))
+                    TextAction(Texts.CANCEL, { choosing = false }, color = AppTheme.colors.secondary)
+                }
+            }
+        }
         if (!state.hasKey && state.composer.ai == AiUi.Idle) {
             Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(Texts.AI_CONNECT_HINT, style = AppTheme.type.caption, modifier = Modifier.weight(1f))
@@ -120,6 +172,9 @@ fun JournalScreen(
             canSend = state.canSend, placeholder = Texts.INPUT_PLACEHOLDER,
             readOnly = state.composer.saving, sendDescription = Texts.AI_SEND,
             modifier = Modifier.navigationBarsPadding().testTag("input"),
+            leading = {
+                IconAction({ choosing = !choosing }, Texts.PHOTO_READ, Modifier.testTag("open-photo"), active = choosing && canPhoto, enabled = canPhoto) { CameraIcon(it) }
+            },
         )
     }
 }
@@ -153,10 +208,17 @@ private fun AiPanel(c: ComposerState, vm: JournalViewModel, onForm: () -> Unit, 
         AiUi.Idle -> Unit
         AiUi.Reading -> Column(Modifier.fillMaxWidth().testTag("ai-reading")) {
             Hairline()
+            val reading = when {
+                c.saving -> Texts.AI_SAVING
+                !c.fromPhotos -> Texts.AI_READING
+                c.photos.isEmpty() -> Texts.RECEIPT_PROCESSING
+                else -> Texts.PHOTO_READING
+            }
             Row(Modifier.fillMaxWidth().padding(end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                FeedNote(if (c.saving) Texts.AI_SAVING else Texts.AI_READING, NoteTone.Info, Modifier.weight(1f))
+                FeedNote(reading, NoteTone.Info, Modifier.weight(1f))
                 if (!c.saving) TextAction(Texts.CANCEL, vm::onAiClose)
             }
+            PhotoStrip(c.photos)
         }
         is AiUi.Failed -> Column(Modifier.fillMaxWidth().testTag("ai-failed")) {
             Hairline()
@@ -171,12 +233,18 @@ private fun AiPanel(c: ComposerState, vm: JournalViewModel, onForm: () -> Unit, 
         }
         is AiUi.Result -> Column(Modifier.fillMaxWidth().testTag("ai-result")) {
             Hairline()
-            PanelTitle(Texts.AI_RESULT)
-            Column(Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
+            PanelTitle(if (c.fromPhotos) Texts.PHOTO_RESULT else Texts.AI_RESULT)
+            PhotoStrip(c.photos)
+            Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState())) {
+                ai.notes.forEach { note ->
+                    Text(note, style = AppTheme.type.caption.copy(color = AppTheme.colors.time),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp).testTag("ai-note"))
+                }
                 ai.items.forEach { item ->
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.Top) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).testTag("ai-item"), verticalAlignment = Alignment.Top) {
                         Column(Modifier.weight(1f)) {
                             Text(item.title, style = AppTheme.type.body, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            item.caption?.let { Text(it, style = AppTheme.type.caption, maxLines = 2, overflow = TextOverflow.Ellipsis) }
                             if (item.draft.tags.isNotEmpty()) Text(item.draft.tags.joinToString(" ") { "#$it" }, style = AppTheme.type.caption)
                             item.warnings.forEach { Text(it, style = AppTheme.type.caption.copy(color = AppTheme.colors.time)) }
                             item.problems.forEach { Text(it, style = AppTheme.type.caption.copy(color = AppTheme.colors.error)) }
@@ -192,6 +260,23 @@ private fun AiPanel(c: ComposerState, vm: JournalViewModel, onForm: () -> Unit, 
                 Spacer(Modifier.weight(1f))
                 TextAction(if (c.busy) "…" else Texts.AI_RECORD, vm::onAiRecord, Modifier.testTag("ai-record"),
                     enabled = !c.busy && ai.items.all { it.problems.isEmpty() })
+            }
+        }
+    }
+}
+
+/** The receipt photos DeepSeek is reading, small, in the order they were chosen. */
+@Composable
+private fun PhotoStrip(photos: List<ReceiptPhoto>) {
+    if (photos.isEmpty()) return
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp).testTag("ai-photos"),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        photos.forEach { photo ->
+            val image by produceState<ImageBitmap?>(null, photo.receipt.id) {
+                value = withContext(Dispatchers.IO) { runCatching { photo.bytes?.let { ReceiptImages.thumbnail(it, 160)?.asImageBitmap() } }.getOrNull() }
+            }
+            Box(Modifier.size(width = 40.dp, height = 52.dp).border(1.dp, AppTheme.colors.border)) {
+                image?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
             }
         }
     }

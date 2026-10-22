@@ -1,7 +1,8 @@
 # Decisions
 
 The person's clarifications override the [original AI-generated brief](brief.ru.md). The current product direction is
-AI-first expense capture (0.3), with readable receipt photos, manual export/restore and secondary manual entry.
+AI-first expense capture (0.3), from typed notes and, since 0.4.0, receipt photos read by DeepSeek, with manual export/restore
+and secondary manual entry.
 
 ## The rule: spending, not balances
 
@@ -42,8 +43,10 @@ account?" goes against this rule.
 - A forced `record_operations` function returns one complete batch (up to 50 expenses), or an explicit clarification status.
   An invalid item refuses the whole batch; malformed/duplicate/truncated answers are refused rather than partially saved.
 - The request contains the submitted note, date, time zone, language, default currency, expense-category paths/keywords
-  and existing tag names. No history, payment methods, opening balances or photos are included, and the answer has no
+  and existing tag names. No history, payment methods or opening balances are included, and the answer has no
   payment-method field: how something was paid is never recorded.
+- Everything uses `deepseek-flash` (the author asked for Flash for everything). DeepSeek serves that name with its newest
+  Flash model, which accepts images (October 2026: V4.1-Flash-1017); no separate vision model is used.
 - The key is AES-GCM encrypted with Android Keystore, used for API authentication, excluded from exports and Android backup.
   A saved key is enough to use primary input; the old `ai_enabled` setting survives only for export/restore compatibility.
 - Typing alone never calls the API. A synchronous busy guard prevents concurrent sends. Editing or cancelling cancels the
@@ -53,6 +56,26 @@ account?" goes against this rule.
   so downstream models do not treat generated labels as independently confirmed financial facts.
 - Processing input needs a network connection. Stored history, manual entry, photo handling and export/restore remain usable
   offline. No backend, cloud journal or device sync was introduced: the requested AI-first change concerns input.
+
+## Receipt photos read by DeepSeek (0.4.0)
+
+- The author asked for receipts first: the camera icon left of the line offers Camera or From gallery (up to 10 photos);
+  photos shared to the app from the gallery take the same way. Only photos the person explicitly sends are uploaded.
+- A forced `record_receipts` function returns receipts, each with the numbers of the photos it is on (a long receipt can
+  take several), payee, date, time, currency, printed total and **parts: one per expense category** (the author's choice
+  over "one record per receipt" and "one record per item"). Items without a fitting category share a part with no
+  category. Each part becomes a record: the receipt's payee/date/time/currency, the part's items as the note, and copies of
+  the receipt's photos (one receipt row per record, so the bytes are stored once per part; the schema stays version 2).
+- There is no typed line to check amounts against, so the check is arithmetic: the parts must add up exactly to the
+  printed total. A receipt that does not add up, has no total, or a photo no receipt came from, is reported above the
+  result. Unlike a typed line, a receipt is **always shown for a check** and recorded only by "record" (the author's
+  choice). Malformed answers (wrong photo numbers, non-string items, the line's function) refuse the whole answer.
+- Statuses `unreadable`, `not_a_purchase` and `unsupported` (refund receipts, income) are explained; the manual form then
+  opens with the photos attached. Typing in the line while photos are read leaves both alone; the line is kept afterwards.
+- Photos are compressed and stripped of EXIF as before; DeepSeek gets a copy downsized to about 1.69 MP, the size it would
+  scale to itself, so uploads stay small and text is not scaled twice. Photo calls get longer HTTP timeouts.
+- Not verified against the live API in automated tests (no user key is used); the request shape follows the official
+  vision guide (`image_url` with a base64 data URL in the user message).
 
 ## Money and time
 

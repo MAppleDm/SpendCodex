@@ -177,7 +177,7 @@ class AiFlowTest {
         assertEquals(0, server.requestCount)
         assertEquals(0, count())
         compose.onNodeWithTag("ai-manual").assertExists()
-        val draft = vm.formDraft()
+        val draft = vm.formStart().draft
         assertEquals("кофе 4.50", draft.description)
         assertEquals("", draft.amount)
     }

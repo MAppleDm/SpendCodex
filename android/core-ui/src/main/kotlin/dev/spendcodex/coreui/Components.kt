@@ -400,7 +400,8 @@ fun Token(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, weak
 }
 
 /**
- * The journal's text input and send action. Secondary entry actions belong in the page header.
+ * The journal's text input and send action, with [leading] (the receipt camera) before the text. Other entry actions belong
+ * in the page header.
  */
 @Composable
 fun InputBar(
@@ -414,11 +415,16 @@ fun InputBar(
     sendDescription: String = CoreTexts.send,
     readOnly: Boolean = false,
     textStyle: TextStyle = AppTheme.type.body,
+    leading: (@Composable () -> Unit)? = null,
 ) {
     val c = AppTheme.colors
     Column(modifier.fillMaxWidth().background(c.background)) {
         Hairline()
-        Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.Bottom) {
+        Row(Modifier.padding(start = if (leading != null) 4.dp else 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.Bottom) {
+            if (leading != null) {
+                leading()
+                Spacer(Modifier.width(8.dp))
+            }
             Box(Modifier.weight(1f).padding(vertical = 12.dp)) {
                 if (value.isEmpty()) Text(placeholder, style = textStyle.copy(color = c.tertiary), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 BasicTextField(

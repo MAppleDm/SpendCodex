@@ -6,6 +6,7 @@ import dev.spendcodex.data.backup.ExportScope
 import dev.spendcodex.data.domain.CategoryKind
 import dev.spendcodex.data.domain.Draft
 import dev.spendcodex.data.domain.Filter
+import dev.spendcodex.data.receipts.ReceiptPhoto
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -14,9 +15,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
-/** What the operation page opens for: a new record (with what is already known) or a stored one. */
+/** What the operation page opens for: a new record (with what is already known, receipt photos too) or a stored one. */
 sealed interface OperationRequest {
-    data class New(val draft: Draft) : OperationRequest
+    data class New(val draft: Draft, val photos: List<ReceiptPhoto> = emptyList()) : OperationRequest
     data class Edit(val id: String) : OperationRequest
 }
 
