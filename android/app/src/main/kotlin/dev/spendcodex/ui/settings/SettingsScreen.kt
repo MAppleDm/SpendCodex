@@ -20,6 +20,8 @@ import androidx.compose.runtime.Composable
 import dev.spendcodex.coreui.Palette
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -101,6 +103,10 @@ fun SettingsScreen(
             Hint(Texts.ABOUT_TEXT)
             Hint(Texts.version(version))
             StatRow(Texts.SOURCE, "↗", onClick = { onOpenUrl(dev.spendcodex.ui.update.SOURCE_URL) })
+            val logs by produceState<Long?>(null, u.logsBusy) { value = vm.logsSize() }
+            StatRow(Texts.LOGS, if (u.logsBusy) "…" else logs?.let(Texts::logsSize).orEmpty() + " ↗", Modifier.testTag("settings-logs"),
+                enabled = !u.logsBusy, onClick = vm::onSendLogs)
+            Hint(if (u.logsFailed) Texts.LOGS_FAILED else Texts.LOGS_HINT, color = if (u.logsFailed) c.error else Color.Unspecified)
             Hairline(Modifier.padding(top = 8.dp))
             Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(Texts.ERASE_HINT, style = AppTheme.type.caption, modifier = Modifier.weight(1f))

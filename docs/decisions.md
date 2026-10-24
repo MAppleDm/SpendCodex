@@ -57,25 +57,44 @@ account?" goes against this rule.
 - Processing input needs a network connection. Stored history, manual entry, photo handling and export/restore remain usable
   offline. No backend, cloud journal or device sync was introduced: the requested AI-first change concerns input.
 
-## Receipt photos read by DeepSeek (0.4.0)
+## Receipt photos read by DeepSeek (0.4.0; one record per receipt since 0.4.1)
 
 - The author asked for receipts first: the camera icon left of the line offers Camera or From gallery (up to 10 photos);
   photos shared to the app from the gallery take the same way. Only photos the person explicitly sends are uploaded.
-- A forced `record_receipts` function returns receipts, each with the numbers of the photos it is on (a long receipt can
-  take several), payee, date, time, currency, printed total and **parts: one per expense category** (the author's choice
-  over "one record per receipt" and "one record per item"). Items without a fitting category share a part with no
-  category. Each part becomes a record: the receipt's payee/date/time/currency, the part's items as the note, and copies of
-  the receipt's photos (one receipt row per record, so the bytes are stored once per part; the schema stays version 2).
-- There is no typed line to check amounts against, so the check is arithmetic: the parts must add up exactly to the
-  printed total. A receipt that does not add up, has no total, or a photo no receipt came from, is reported above the
-  result. Unlike a typed line, a receipt is **always shown for a check** and recorded only by "record" (the author's
-  choice). Malformed answers (wrong photo numbers, non-string items, the line's function) refuse the whole answer.
+- **One receipt is one purchase, one record** (since 0.4.1). In 0.4.0 the author chose one record per expense category,
+  but a delivery order on two screenshots then came out as four records, one of them its discount with a minus, with
+  amounts the model had added up wrongly; "хоть это и одна покупка, чек на непонятно что раскладывается". Asked again,
+  the author chose one record per receipt.
+- A forced `record_receipts` function returns receipts, each with the numbers of the photos it is on (a long receipt, or an
+  order's summary and its list of items, can take several), payee, date, time, currency, the **printed total** (the amount
+  paid, after discounts, with delivery), the category most of the money went to, a description, every line as printed
+  (delivery, packaging, discounts and promo codes as lines of their own) and tags. Several receipts only for separate
+  purchases. The record: the total as the amount, the lines as the note, copies of the receipt's photos.
+- The model copies the total and never adds anything up, so there is nothing to fail to add up. A receipt without a total
+  (or with one of zero or less, which is never sign-flipped) comes back without an amount and cannot be recorded until the
+  person gives it ("edit" opens the form with the photos); it and a photo no receipt came from are reported above the
+  result. Records from 0.4.0 split by category stay as they are. Unlike a typed line, a receipt is **always shown for a
+  check** and recorded only by "record" (the author's choice). Malformed answers (wrong photo numbers, non-string items, the line's function) refuse the whole answer.
 - Statuses `unreadable`, `not_a_purchase` and `unsupported` (refund receipts, income) are explained; the manual form then
   opens with the photos attached. Typing in the line while photos are read leaves both alone; the line is kept afterwards.
 - Photos are compressed and stripped of EXIF as before; DeepSeek gets a copy downsized to about 1.69 MP, the size it would
   scale to itself, so uploads stay small and text is not scaled twice. Photo calls get longer HTTP timeouts.
 - Not verified against the live API in automated tests (no user key is used); the request shape follows the official
   vision guide (`image_url` with a base64 data URL in the user message).
+
+## Logs (0.4.1)
+
+- The author asked for logs "in one folder on the phone", sent from the settings as a .zip, "можно не скупиться на память".
+  `AppLog` writes to `files/logs` (private storage): one file a day, a new one past 8 MB, at most 2 GB in all (in effect
+  no limit, as the author asked), the oldest deleted first; lines are also mirrored to logcat. Uncaught exceptions are
+  written before the app ends.
+- Logged: start (version, Android, device), lifecycle and shares, every DeepSeek call (what was sent, minus images and key;
+  HTTP code and time; the model's tool arguments as written), what was shown to check or recorded, deletions, form saves,
+  photo failures, export/restore and update results, with stack traces.
+- **Settings → Send logs (.zip)** packs the log files with `device.txt` (app, Android, device, locale, zone, the app's
+  choices, whether a key is saved) and `logcat.txt` (the app's own logcat), shared like an export. The key is never written
+  (anything shaped `sk-…` is masked); typed lines and receipts are, which the hint says. Logs are not in Android backups,
+  and "erase everything" deletes them.
 
 ## Money and time
 

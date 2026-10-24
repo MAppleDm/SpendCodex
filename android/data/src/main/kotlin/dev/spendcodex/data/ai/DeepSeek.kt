@@ -9,6 +9,7 @@ import dev.spendcodex.data.domain.DraftTime
 import dev.spendcodex.data.domain.Origin
 import dev.spendcodex.data.domain.TxType
 import dev.spendcodex.data.domain.normalize
+import dev.spendcodex.data.log.AppLog
 import dev.spendcodex.data.parse.QuickLine
 import java.io.IOException
 import java.time.LocalDate
@@ -18,6 +19,7 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -51,16 +53,16 @@ data class AiContext(
 
 /**
  * One operation DeepSeek read. [amountInText]: its amount is a number that is in the line itself, not one the model made up.
- * From photos there is no line to compare with: the operation is a part of [receipt], whose check is that its parts add up.
+ * From photos there is no line to compare with: the operation is a whole [receipt], and its amount is the printed total.
  */
 enum class AiIssue { Currency, Date, Time, Tags }
 data class AiDraft(val draft: Draft, val amountInText: Boolean, val unknownCategory: String?, val issues: List<AiIssue> = emptyList(), val receipt: AiReceipt? = null)
 
 /**
- * A receipt DeepSeek read from photos, split into one operation per category. [photos]: the indices of the photos it is on
- * (a long receipt can take several). [total]: the amount paid, as printed, if it was found; [partsAddUp]: its parts make it.
+ * A receipt DeepSeek read from photos: one purchase, one operation. [photos]: the indices of the photos it is on (a long
+ * receipt, or an order's summary and its list of items, can take several). [total]: the amount paid, as printed, if found.
  */
-data class AiReceipt(val index: Int, val photos: List<Int>, val total: String?, val partsAddUp: Boolean)
+data class AiReceipt(val index: Int, val photos: List<Int>, val total: String?)
 
 /** Why DeepSeek could not help. The line stays in the input for another try. */
 sealed class AiFailure(val detail: String, val retryable: Boolean) : Exception(detail) {
@@ -89,6 +91,7 @@ class AiReader(
 
     suspend fun read(text: String, ctx: AiContext): List<AiDraft> {
         val apiKey = key()?.takeIf { it.isNotBlank() } ?: throw AiFailure.NoKey()
+        AppLog.i(TAG, "reading a line (${text.length} chars; ${ctx.categories.size} categories, ${ctx.tags.size} tags): $text")
         val answer = call(apiKey, body(text, ctx))
         val args = arguments(answer, "record_operations")
         val status = (args["status"] as? JsonPrimitive)?.content ?: "ok"
@@ -102,52 +105,45 @@ class AiReader(
     }
 
     /**
-     * Receipts (or payment screenshots) in [photos], JPEG bytes in the order the person chose them: one operation per expense
-     * category of each receipt, with the photos it came from. A receipt whose parts do not add up to its printed total is
-     * still returned, marked, for the person to check; anything malformed refuses the whole answer.
+     * Receipts (or payment screenshots) in [photos], JPEG bytes in the order the person chose them: one operation per
+     * receipt, for its printed total, with the photos it came from. Nothing is added up or split here, so nothing can fail
+     * to add up; a receipt without a total comes back without an amount, for the person to give. Anything malformed
+     * refuses the whole answer.
      */
     suspend fun readPhotos(photos: List<ByteArray>, ctx: AiContext): List<AiDraft> {
         require(photos.size in 1..MAX_PHOTOS)
         val apiKey = key()?.takeIf { it.isNotBlank() } ?: throw AiFailure.NoKey()
+        AppLog.i(TAG, "reading ${photos.size} photo(s): ${photos.joinToString { "${it.size / 1024} KB" }}; ${ctx.categories.size} categories, ${ctx.tags.size} tags")
         val args = arguments(call(apiKey, photoBody(photos, ctx), slow = true), "record_receipts")
         val status = (args["status"] as? JsonPrimitive)?.content ?: "ok"
         if (status in setOf("unreadable", "not_a_purchase", "unsupported")) throw AiFailure.Input(status)
         if (status != "ok") throw AiFailure.BadOutput("unknown status")
         val receipts = (args["receipts"] as? JsonArray) ?: throw AiFailure.BadOutput("no receipts")
         if (receipts.isEmpty() || receipts.size > MAX_RECEIPTS) throw AiFailure.BadOutput("no receipts or too many receipts")
-        val drafts = receipts.flatMapIndexed { index, r -> receiptDrafts(r as? JsonObject ?: throw AiFailure.BadOutput("invalid receipt"), index, photos.size, ctx) }
-        if (drafts.size > 50) throw AiFailure.BadOutput("too many expenses")
-        return drafts
+        return receipts.mapIndexed { index, r -> receiptDraft(r as? JsonObject ?: throw AiFailure.BadOutput("invalid receipt"), index, photos.size, ctx) }
     }
 
-    private fun receiptDrafts(receipt: JsonObject, index: Int, photoCount: Int, ctx: AiContext): List<AiDraft> {
+    private fun receiptDraft(receipt: JsonObject, index: Int, photoCount: Int, ctx: AiContext): AiDraft {
         val photos = (receipt["photos"] as? JsonArray)?.map { p ->
             (p as? JsonPrimitive)?.takeIf { !it.isString }?.content?.toIntOrNull()?.takeIf { it in 0 until photoCount }
                 ?: throw AiFailure.BadOutput("invalid photo number")
         }?.distinct()?.takeIf { it.isNotEmpty() } ?: throw AiFailure.BadOutput("receipt without photos")
-        val parts = (receipt["parts"] as? JsonArray)?.takeIf { it.isNotEmpty() } ?: throw AiFailure.BadOutput("receipt without parts")
-        val total = text(receipt, "total")?.removePrefix("+")
-        val sum = parts.map { (it as? JsonObject)?.let { p -> text(p, "amount") }?.let { a -> Decimal.parseHuman(a, 3) } }
-        val totalValue = total?.let { Decimal.parseHuman(it, 3) }
-        val addsUp = totalValue != null && sum.all { it != null && it > 0 } && sum.sumOf { it!! } == totalValue
-        val info = AiReceipt(index, photos, total, addsUp)
-        return parts.map { element ->
-            val part = element as? JsonObject ?: throw AiFailure.BadOutput("invalid receipt part")
-            val items = when (val raw = part["items"]) {
-                null, is JsonNull -> emptyList()
-                is JsonArray -> raw.map { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content?.trim() ?: throw AiFailure.BadOutput("invalid items") }
-                else -> throw AiFailure.BadOutput("invalid items")
-            }.filter { it.isNotEmpty() }.take(MAX_ITEMS)
-            // the receipt's own fields go to every part of it; its items become the part's note
-            val op = buildJsonObject {
-                part.forEach { (k, v) -> if (k != "items") put(k, v) }
-                listOf("payee", "date", "time", "currency").forEach { k -> put(k, receipt[k] ?: JsonNull) }
-                put("type", "expense")
-                put("note", items.joinToString("; ").ifEmpty { null })
-            }
-            val ai = toDraft(op, "", ctx)
-            ai.copy(draft = ai.draft.copy(inputText = null), amountInText = true, receipt = info)
+        // a total of nothing or less is not one: the person is asked for the amount instead of a sign being flipped
+        val total = text(receipt, "total")?.removePrefix("+")?.takeIf { Decimal.parseHuman(it, 3)?.let { v -> v > 0 } ?: true }
+        val items = when (val raw = receipt["items"]) {
+            null, is JsonNull -> emptyList()
+            is JsonArray -> raw.map { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content?.trim() ?: throw AiFailure.BadOutput("invalid items") }
+            else -> throw AiFailure.BadOutput("invalid items")
+        }.filter { it.isNotEmpty() }.take(MAX_ITEMS)
+        // the receipt is the operation: its total is the amount, its items (with delivery and discounts) the note
+        val op = buildJsonObject {
+            listOf("category", "description", "payee", "date", "time", "currency", "tags").forEach { k -> receipt[k]?.let { put(k, it) } }
+            put("type", "expense")
+            put("amount", total.orEmpty())
+            put("note", items.joinToString("; ").ifEmpty { null })
         }
+        val ai = toDraft(op, "", ctx, needsAmount = false)
+        return ai.copy(draft = ai.draft.copy(inputText = null), amountInText = true, receipt = AiReceipt(index, photos, total))
     }
 
     internal fun photoBody(photos: List<ByteArray>, ctx: AiContext): JsonObject = buildJsonObject {
@@ -224,7 +220,8 @@ class AiReader(
     private fun categoryPath(c: Category, ctx: AiContext): String =
         c.parentId?.let { id -> ctx.categories.firstOrNull { it.id == id } }?.let { "${it.name} › ${c.name}" } ?: c.name
 
-    private fun toDraft(op: JsonObject, text: String, ctx: AiContext): AiDraft {
+    /** [needsAmount]: false for a receipt whose total was not found, which the person then gives. */
+    private fun toDraft(op: JsonObject, text: String, ctx: AiContext, needsAmount: Boolean = true): AiDraft {
         fun s(name: String): String? {
             val value = op[name] ?: return null
             if (value is JsonNull) return null
@@ -234,7 +231,7 @@ class AiReader(
         val typeName = s("type") ?: throw AiFailure.BadOutput("expense without type")
         if (typeName != "expense") throw AiFailure.Input("unsupported")
         val type = TxType.Expense
-        val amount = s("amount")?.removePrefix("+") ?: throw AiFailure.BadOutput("expense without amount")
+        val amount = s("amount")?.removePrefix("+") ?: if (needsAmount) throw AiFailure.BadOutput("expense without amount") else ""
         val categoryName = s("category")
         val wantedKind = type.categoryKind
         val category = categoryName?.let { n ->
@@ -288,18 +285,24 @@ class AiReader(
         val request = Request.Builder().url(baseUrl.trimEnd('/') + "/chat/completions")
             .header("Authorization", "Bearer $key")
             .post(body.toString().toRequestBody(JSON_TYPE)).build()
+        val started = System.nanoTime()
+        fun ms() = (System.nanoTime() - started) / 1_000_000
         val response = try {
             (if (slow) slowHttp else http).newCall(request).await()
         } catch (e: IOException) {
+            AppLog.w(TAG, "no answer after ${ms()} ms", e)
             throw AiFailure.Unavailable("${e.javaClass.simpleName}: ${e.message}")
         }
         response.use {
             val text = try {
                 it.body.string()
             } catch (e: IOException) {
+                AppLog.w(TAG, "answer broke off after ${ms()} ms", e)
                 throw AiFailure.Unavailable("${e.javaClass.simpleName}: ${e.message}")
             }
             val code = it.code
+            AppLog.i(TAG, "HTTP $code from $model after ${ms()} ms, ${text.length} chars")
+            if (code !in 200..299) AppLog.w(TAG, "refused: " + text.take(2_000).replace(key, "sk-…"))
             if (code in 200..299) {
                 return try {
                     COMPACT.parseToJsonElement(text).jsonObject
@@ -317,7 +320,11 @@ class AiReader(
     }
 
     private fun arguments(answer: JsonObject, tool: String): JsonObject {
-        val choice = (answer["choices"] as? JsonArray)?.singleOrNull() as? JsonObject ?: throw AiFailure.BadOutput("no choices")
+        val choice = (answer["choices"] as? JsonArray)?.singleOrNull() as? JsonObject
+        // what the model said, as it said it: the first thing to look at when a reading went wrong
+        AppLog.i(TAG, "answer: model ${(answer["model"] as? JsonPrimitive)?.content}, finish ${(choice?.get("finish_reason") as? JsonPrimitive)?.content}, " +
+            "usage ${answer["usage"]}\n" + (choice?.get("message")?.let(::readable) ?: answer.toString().take(4_000)))
+        if (choice == null) throw AiFailure.BadOutput("no choices")
         if ((choice["finish_reason"] as? JsonPrimitive)?.content == "length") throw AiFailure.BadOutput("incomplete answer")
         val message = choice["message"] as? JsonObject
             ?: throw AiFailure.BadOutput("no choices")
@@ -340,6 +347,17 @@ class AiReader(
         }
     }
 
+    /** A message for the log: each tool call's arguments as the model wrote them, then any text it added. */
+    private fun readable(message: JsonElement): String {
+        val m = message as? JsonObject ?: return message.toString()
+        val calls = (m["tool_calls"] as? JsonArray).orEmpty().map { call ->
+            val f = (call as? JsonObject)?.get("function") as? JsonObject
+            "${(f?.get("name") as? JsonPrimitive)?.content}: ${(f?.get("arguments") as? JsonPrimitive)?.content ?: f}"
+        }
+        val content = (m["content"] as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content
+        return (calls + listOfNotNull(content?.let { "content: $it" })).joinToString("\n").ifEmpty { m.toString() }
+    }
+
     private fun reason(text: String): String {
         val fromJson = runCatching {
             when (val error = COMPACT.parseToJsonElement(text).jsonObject["error"]) {
@@ -353,6 +371,7 @@ class AiReader(
 
     companion object {
         const val MAX_PHOTOS = 10
+        private const val TAG = "DeepSeek"
         private const val MAX_RECEIPTS = 20
         private const val MAX_ITEMS = 80
         private val JSON_TYPE = "application/json".toMediaType()
@@ -396,22 +415,29 @@ class AiReader(
             - This journal records expenses only. A refund receipt, income or a transfer between own accounts: return status
               "unsupported" and receipts []. Status "unreadable" if the amounts cannot be read with certainty (blurred, cut
               off, too small); "not_a_purchase" if no purchase is shown. Otherwise "ok".
-            - The photos are numbered from 0 in the order given ("photo 0", "photo 1", ...). One receipt may be on several
-              photos (a long receipt in parts, which may overlap: never count a line twice); several photos may be different
-              receipts. List every receipt once, with photos: the numbers of all photos it is on.
-            - payee: the shop or business as printed (a short name). date (YYYY-MM-DD) and time (HH:MM): when it was paid, as
-              printed; null if not shown. currency: the ISO 4217 code of the receipt's money (₽ or "руб" is RUB); null if no
-              sign of it. total: the final amount paid, as printed, after discounts, as a decimal string with a dot.
-            - parts: split the receipt by expense category. Put each item in the best category from context.categories (the
-              full parent › child name as given; use the keywords as hints) and give one part per category, with amount: the
-              sum paid for its items after their discounts, as a decimal string with a dot. Items that fit no category go
-              together into one part with category null. If everything is one category, give one part. The parts of a receipt
-              must add up exactly to its total; never round. Do not invent category names.
-            - description: a few words for the part in context.language, lowercase (e.g. "продукты", "бытовая химия").
-            - items: the part's items as printed, each with its price, shortened if very long (e.g. "Молоко 2,5% 1 л 89.90").
-            - tags: 1–4 concise tags about the purchase, in context.language, lowercase, underscores instead of spaces, up to
-              64 characters each; reuse context.existing_tags with the same meaning. Do not infer personal traits, health
-              conditions, business purpose or other facts the receipt does not establish.
+            - One receipt is one purchase, one payment: it is recorded as a single expense for its total. Never split a
+              receipt into parts, and never give a discount, a promo code, delivery or packaging as a receipt of its own.
+            - The photos are numbered from 0 in the order given ("photo 0", "photo 1", ...). One purchase may be on several
+              photos: a long receipt in parts (which may overlap: never count a line twice), or screenshots of one order (its
+              summary with the total and its list of items; the same order number, shop or amounts tie them together). That
+              is ONE receipt. Several receipts only for separate purchases paid separately. List every receipt once, with
+              photos: the numbers of all photos it is on.
+            - payee: the shop, service or business as printed (a short name, e.g. "Пятёрочка", "Самокат"). date (YYYY-MM-DD)
+              and time (HH:MM): when it was paid, as printed; null if not shown. currency: the ISO 4217 code of the receipt's
+              money (₽ or "руб" is RUB); null if no sign of it.
+            - total: the final amount paid, as printed ("Итого", "К оплате", "Total"), after all discounts and promo codes and
+              with delivery, packaging and fees, as a decimal string with a dot. Copy it, never compute it. null if not shown.
+            - category: the one category from context.categories (the full parent › child name as given; use the keywords as
+              hints) that most of the money went to; null if none fits. Do not invent category names.
+            - description: a few words for the whole purchase in context.language, lowercase (e.g. "продукты",
+              "продукты и бытовая химия").
+            - items: every line of the receipt as printed, each with its quantity if more than one and its price (e.g.
+              "Молоко 2,5% 1 л 89.90", "Приправа Orient 5 шт 184.95"), shortened if very long; then delivery, packaging,
+              service fees, discounts and promo codes as lines of their own, a discount with a minus (e.g. "Доставка 59.00",
+              "Скидка на заказ −265.00", "Промокод −500.00"). Leave out promo code values, order numbers and card details.
+            - tags: 1–5 concise tags about what was bought (the main kinds of goods), in context.language, lowercase,
+              underscores instead of spaces, up to 64 characters each; reuse context.existing_tags with the same meaning.
+              Do not infer personal traits, health conditions, business purpose or other facts the receipt does not establish.
             - How it was paid (card numbers, cash, a bank) is never recorded; leave it out everywhere.
         """.trimIndent()
 
@@ -419,7 +445,7 @@ class AiReader(
             put("type", "function")
             putJsonObject("function") {
                 put("name", "record_receipts")
-                put("description", "The receipts in the photos, each split into one part per expense category.")
+                put("description", "The receipts in the photos: one per purchase, each recorded as one expense for its printed total.")
                 putJsonObject("parameters") {
                     put("type", "object")
                     putJsonObject("properties") {
@@ -431,21 +457,11 @@ class AiReader(
                                 putJsonObject("properties") {
                                     putJsonObject("photos") { put("type", "array"); putJsonObject("items") { put("type", "integer") } }
                                     nullable("payee"); nullable("date"); nullable("time"); nullable("currency"); nullable("total")
-                                    putJsonObject("parts") {
-                                        put("type", "array")
-                                        putJsonObject("items") {
-                                            put("type", "object")
-                                            putJsonObject("properties") {
-                                                putJsonObject("amount") { put("type", "string") }
-                                                nullable("category"); putJsonObject("description") { put("type", "string") }
-                                                putJsonObject("items") { put("type", "array"); putJsonObject("items") { put("type", "string") } }
-                                                putJsonObject("tags") { put("type", "array"); putJsonObject("items") { put("type", "string") } }
-                                            }
-                                            putJsonArray("required") { add("amount"); add("description"); add("items"); add("tags") }
-                                        }
-                                    }
+                                    nullable("category"); putJsonObject("description") { put("type", "string") }
+                                    putJsonObject("items") { put("type", "array"); putJsonObject("items") { put("type", "string") } }
+                                    putJsonObject("tags") { put("type", "array"); putJsonObject("items") { put("type", "string") } }
                                 }
-                                putJsonArray("required") { add("photos"); add("total"); add("parts") }
+                                putJsonArray("required") { add("photos"); add("total"); add("description"); add("items"); add("tags") }
                             }
                         }
                     }

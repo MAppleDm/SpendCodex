@@ -41,11 +41,11 @@ Search combines text, dates, categories, tags and currencies, and can export its
 ## Receipts
 
 **Photograph a receipt**: the camera icon left of the input line → **Camera** or **From gallery** (up to 10 photos; a long
-receipt can take several), or share photos to SpendCodex from the gallery. DeepSeek reads each receipt and splits it by
-category: a supermarket receipt becomes, say, “groceries 840.50” and “household 450”, each with the shop, the date and
-time on the receipt, the items in the note and the photo attached. You check the result and tap **Record**. If the
-parts do not add up to the receipt's total, or a photo was not read, it says so before you record. Photos go to DeepSeek
-downsized and without metadata.
+receipt can take several), or share photos to SpendCodex from the gallery. DeepSeek reads each receipt as one purchase:
+one record for the total paid, with the shop, the date and time on the receipt, the main category, every line (delivery
+and discounts included) in the note and the photos attached. Screenshots of one order, its summary and its list of
+items, are one receipt. You check the result and tap **Record**. If no total was found, or a photo was not read, it says
+so before you record. Photos go to DeepSeek downsized and without metadata.
 
 To attach photos by hand, open a record, then **Receipt photos → Camera / From gallery**, up to 10 photos. Images are compressed on the phone;
 gallery originals stay intact. Tap a thumbnail to zoom. Photo changes apply on save and removal has undo.
@@ -62,6 +62,10 @@ Each send submits **your typed note including its amounts**, today's date, time 
 categories with keywords and existing tag names to DeepSeek. Past records and receipt images are not sent.
 The key is encrypted on the device, used for authentication and excluded from exports. Saved records stay on the
 phone; there is no device sync.
+
+**Settings → Send logs (.zip)** packs the app's log for whoever helps you find a fault: DeepSeek requests and answers,
+errors and crashes, kept only on the phone (up to 2 GB, the oldest removed). The key is never written; your records
+and receipts are. "Erase everything" erases the logs too.
 
 Under **Settings → Data**:
 

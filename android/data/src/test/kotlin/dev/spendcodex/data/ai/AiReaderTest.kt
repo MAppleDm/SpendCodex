@@ -178,12 +178,11 @@ class AiReaderTest {
     )
     private val photoA = byteArrayOf(-1, -40, -1, 1, 2, 3)
     private val photoB = byteArrayOf(-1, -40, -1, 4, 5, 6)
-    private val shop = """{"photos":[0,1],"payee":"Пятёрочка","date":"2026-10-19","time":"18:40","currency":"RUB","total":"1290.50","parts":[
-        {"amount":"840.50","category":"Кафе","description":"кофе и выпечка","items":["Кофе 3в1 340.50","Круассан 500.00"],"tags":["кофе"]},
-        {"amount":"450","category":null,"description":"бытовая химия","items":["Средство для посуды 450.00"],"tags":["дом"]}]}"""
+    private val shop = """{"photos":[0,1],"payee":"Пятёрочка","date":"2026-10-19","time":"18:40","currency":"RUB","total":"1290.50",
+        "category":"Кафе","description":"кофе и бытовая химия","items":["Кофе 3в1 340.50","Круассан 500.00","Средство для посуды 450.00"],"tags":["кофе","дом"]}"""
 
     @Test
-    fun `photos go as images with the receipt function forced, and come back split by category with their photos`() = runTest {
+    fun `photos go as images with the receipt function forced, and each receipt comes back as one expense with its photos`() = runTest {
         server.enqueue(receipts("""{"status":"ok","receipts":[$shop]}"""))
         val drafts = reader.readPhotos(listOf(photoA, photoB), ctx)
         val body = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
@@ -201,36 +200,64 @@ class AiReaderTest {
         // no payment methods either way: none is sent, none asked for
         assertFalse(content[0].jsonObject["text"]!!.jsonPrimitive.content.contains("accounts"))
         assertFalse(body["tools"].toString().contains("\"account\""))
+        // a receipt is never asked for in parts
+        assertFalse(body["tools"].toString().contains("\"parts\""))
 
-        assertEquals(2, drafts.size)
-        val (cafe, home) = drafts
-        assertEquals("840.50", cafe.draft.amount)
-        assertEquals("cafe", cafe.draft.categoryId)
-        assertEquals("Пятёрочка", cafe.draft.payee)
-        assertEquals("RUB", cafe.draft.currency)
-        assertEquals(LocalDate.of(2026, 10, 19), cafe.draft.date)
-        assertEquals(DraftTime.At(LocalTime.of(18, 40)), cafe.draft.time)
-        assertEquals("Кофе 3в1 340.50; Круассан 500.00", cafe.draft.note)
-        assertEquals(Origin.Ai, cafe.draft.origin)
-        assertNull(cafe.draft.inputText)
-        assertEquals(AiReceipt(0, listOf(0, 1), "1290.50", partsAddUp = true), cafe.receipt)
-        assertTrue(cafe.amountInText)
-        assertNull(home.draft.categoryId)
-        assertEquals("Пятёрочка", home.draft.payee)
-        assertEquals(cafe.receipt, home.receipt)
+        val receipt = drafts.single()
+        assertEquals("1290.50", receipt.draft.amount)
+        assertEquals("cafe", receipt.draft.categoryId)
+        assertEquals("кофе и бытовая химия", receipt.draft.description)
+        assertEquals("Пятёрочка", receipt.draft.payee)
+        assertEquals("RUB", receipt.draft.currency)
+        assertEquals(LocalDate.of(2026, 10, 19), receipt.draft.date)
+        assertEquals(DraftTime.At(LocalTime.of(18, 40)), receipt.draft.time)
+        assertEquals("Кофе 3в1 340.50; Круассан 500.00; Средство для посуды 450.00", receipt.draft.note)
+        assertEquals(listOf("кофе", "дом"), receipt.draft.tags)
+        assertEquals(Origin.Ai, receipt.draft.origin)
+        assertNull(receipt.draft.inputText)
+        assertEquals(AiReceipt(0, listOf(0, 1), "1290.50"), receipt.receipt)
+        assertTrue(receipt.amountInText)
+        assertTrue(receipt.issues.isEmpty())
     }
 
     @Test
-    fun `a receipt that does not add up or has no total is marked, a wrong photo number refuses the answer`() = runTest {
-        server.enqueue(receipts("""{"status":"ok","receipts":[${shop.replace("\"1290.50\"", "\"1300.00\"")}]}"""))
-        assertFalse(reader.readPhotos(listOf(photoA, photoB), ctx).all { it.receipt!!.partsAddUp })
-        server.enqueue(receipts("""{"status":"ok","receipts":[${shop.replace("\"1290.50\"", "null")}]}"""))
-        reader.readPhotos(listOf(photoA, photoB), ctx).forEach { assertNull(it.receipt!!.total); assertFalse(it.receipt!!.partsAddUp) }
-        for (bad in listOf(shop.replace("[0,1]", "[0,2]"), shop.replace("[0,1]", "[]"), shop.replace("[0,1]", "[\"0\"]"), shop.replace("\"items\":[\"Средство", "\"items\":[1,\"Средство"))) {
+    fun `an order on two screenshots, with delivery and discounts, is one purchase for the amount paid`() = runTest {
+        // the 0.4.0 split made four records of this one order, one of them the discount, and they did not add up
+        server.enqueue(receipts("""{"status":"ok","receipts":[{"photos":[0,1],"payee":"Самокат","date":null,"time":null,"currency":"RUB",
+            "total":"617.89","category":null,"description":"продукты и хозтовары","items":["Овощная смесь Hortex 2 шт 289.98",
+            "Растворитель Уайт-Спирит 500 мл 99.99","Салфетки Paclan 174.99","Бумажные полотенца Zemma 119.99","Приправа Orient 5 шт 184.95",
+            "Фасоль Бондюэль 159.99","Упаковка 29.00","Доставка 59.00","Скидка на заказ −265.00","Промокод −500.00"],"tags":["продукты","хозтовары"]}]}"""))
+        val order = reader.readPhotos(listOf(photoA, photoB), ctx).single()
+        assertEquals("617.89", order.draft.amount)
+        assertEquals(listOf(0, 1), order.receipt!!.photos)
+        assertTrue(order.draft.note.endsWith("Доставка 59.00; Скидка на заказ −265.00; Промокод −500.00"))
+        assertNull(order.draft.categoryId)
+        assertNull(order.unknownCategory)
+    }
+
+    @Test
+    fun `separate receipts are separate expenses, and a receipt without a total comes back without an amount`() = runTest {
+        val other = shop.replace("[0,1]", "[2]").replace("\"1290.50\"", "\"99.90\"").replace("Пятёрочка", "Аптека")
+        server.enqueue(receipts("""{"status":"ok","receipts":[$shop,$other]}"""))
+        val (first, second) = reader.readPhotos(listOf(photoA, photoB, photoA), ctx)
+        assertEquals("1290.50" to listOf(0, 1), first.draft.amount to first.receipt!!.photos)
+        assertEquals("99.90" to listOf(2), second.draft.amount to second.receipt!!.photos)
+        assertEquals(1, second.receipt!!.index)
+        // no total, or one of nothing or less: the person gives the amount, a sign is never flipped
+        for (total in listOf("null", "\"-617.89\"", "\"0\"")) {
+            server.enqueue(receipts("""{"status":"ok","receipts":[${shop.replace("\"1290.50\"", total)}]}"""))
+            val d = reader.readPhotos(listOf(photoA, photoB), ctx).single()
+            assertEquals(total, "", d.draft.amount)
+            assertNull(d.receipt!!.total)
+        }
+    }
+
+    @Test
+    fun `a wrong photo number or malformed items refuse the answer, as does the line's function`() = runTest {
+        for (bad in listOf(shop.replace("[0,1]", "[0,2]"), shop.replace("[0,1]", "[]"), shop.replace("[0,1]", "[\"0\"]"), shop.replace("\"items\":[\"Кофе", "\"items\":[1,\"Кофе"))) {
             server.enqueue(receipts("""{"status":"ok","receipts":[$bad]}"""))
             try { reader.readPhotos(listOf(photoA, photoB), ctx); fail(bad) } catch (_: AiFailure.BadOutput) { }
         }
-        // the line's function is not an answer about photos
         server.enqueue(receipts("""{"status":"ok","receipts":[$shop]}""", tool = "record_operations"))
         try { reader.readPhotos(listOf(photoA, photoB), ctx); fail() } catch (_: AiFailure.BadOutput) { }
     }

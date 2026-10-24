@@ -23,6 +23,7 @@ import dev.spendcodex.data.domain.Filter
 import dev.spendcodex.data.domain.Origin
 import dev.spendcodex.data.domain.Transaction
 import dev.spendcodex.data.domain.TxType
+import dev.spendcodex.data.log.AppLog
 import dev.spendcodex.data.receipts.ReceiptImages
 import dev.spendcodex.data.receipts.ReceiptLimits
 import dev.spendcodex.data.receipts.ReceiptPhoto
@@ -62,12 +63,12 @@ sealed interface AiUi {
     data class Failed(val message: String, val retryable: Boolean, val needsKey: Boolean = false) : AiUi
     /**
      * Uncertain answers to a line stop here, and every receipt read from photos; an ordinary, validated line saves in one
-     * step. [notes]: what concerns the photos as a whole (one not read, a receipt whose parts do not add up).
+     * step. [notes]: what concerns the photos as a whole (one not read, a receipt without a total).
      */
     data class Result(val items: List<AiItem>, val notes: List<String> = emptyList()) : AiUi
 }
 
-/** One operation to record; from a receipt, with its items as [caption] and the [photos] it is to keep. */
+/** One operation to record; from a receipt (the whole purchase), with its items as [caption] and the [photos] it is to keep. */
 data class AiItem(
     val draft: Draft, val title: String, val amount: String, val warnings: List<String>, val problems: List<String>,
     val caption: String? = null, val photos: List<ReceiptPhoto> = emptyList(),
@@ -193,6 +194,7 @@ class JournalViewModel @Inject constructor(
                     aiItem(d.copy(draft = d.draft.copy(id = id, accountId = d.draft.accountId ?: default,
                         currency = d.draft.currency ?: choices.defaultCurrency)), n, default)
                 }
+                logItems("line", items)
                 if (items.any { it.problems.isNotEmpty() || it.warnings.isNotEmpty() }) {
                     composer.update { it.copy(busy = false, ai = AiUi.Result(items)) }
                 } else save(items, c.batchId)
@@ -212,6 +214,7 @@ class JournalViewModel @Inject constructor(
         }
         request?.cancel()
         val batch = UUID.randomUUID().toString()
+        AppLog.i(TAG, "${uris.size} photo(s) to read")
         composer.update { it.copy(batchId = batch, busy = true, ai = AiUi.Reading, fromPhotos = true, photos = emptyList()) }
         request = viewModelScope.launch {
             val chosen = uris.take(AiReader.MAX_PHOTOS)
@@ -221,8 +224,8 @@ class JournalViewModel @Inject constructor(
                     chosen.mapNotNull { uri ->
                         try { ReceiptImages.read(context, uri, "", clock.millis()) }
                         catch (e: CancellationException) { throw e }
-                        catch (e: Exception) { android.util.Log.w("Receipts", "Could not read a photo", e); null }
-                        catch (e: OutOfMemoryError) { android.util.Log.w("Receipts", "Photo too large", e); null }
+                        catch (e: Exception) { AppLog.w(TAG, "could not read a photo: $uri", e); null }
+                        catch (e: OutOfMemoryError) { AppLog.w(TAG, "photo too large: $uri", e); null }
                     }.distinctBy { it.receipt.sha256 }
                 }
             } finally { afterRead() }
@@ -232,6 +235,7 @@ class JournalViewModel @Inject constructor(
                 return@launch
             }
             composer.update { it.copy(photos = photos) }
+            AppLog.i(TAG, "photos prepared: ${photos.joinToString { "${it.receipt.width}×${it.receipt.height} ${it.receipt.size / 1024} KB" }}")
             val notes = listOfNotNull(
                 Texts.PHOTOS_LIMIT.takeIf { uris.size > chosen.size },
                 Texts.photosSkipped(chosen.size - photos.size).takeIf { photos.size < chosen.size },
@@ -253,17 +257,11 @@ class JournalViewModel @Inject constructor(
                 aiItem(d.copy(draft = draft), n, default)
                     .copy(caption = draft.note.ifBlank { null }, photos = d.receipt?.photos.orEmpty().map { photos[it].copyFor(id) })
             }
-            val receipts = drafts.mapNotNull { it.receipt?.let { r -> r to it.draft } }.distinctBy { it.first.index }
-            val checks = receipts.filter { !it.first.partsAddUp }.map { (r, d) ->
-                val label = Texts.receiptLabel(d.payee.ifBlank { null }, r.index)
-                val currency = d.currency ?: choices.defaultCurrency
-                r.total?.let { total ->
-                    val minor = currency?.let(Currencies::of)?.let { Decimal.parseHuman(total, it.exponent) }
-                    Texts.receiptMismatch(label, if (minor != null) Format.money(minor, currency) else total)
-                } ?: Texts.receiptNoTotal(label)
-            }
+            val receipts = drafts.mapNotNull { it.receipt?.let { r -> r to it.draft } }
+            val checks = receipts.filter { it.first.total == null }.map { (r, d) -> Texts.receiptNoTotal(Texts.receiptLabel(d.payee.ifBlank { null }, r.index)) }
             val read = receipts.flatMap { it.first.photos }.toSet()
             val unread = photos.indices.filter { it !in read }.map { Texts.photoUnread(it + 1) }
+            logItems("photos", items, notes + checks + unread)
             composer.update { it.copy(busy = false, ai = AiUi.Result(items, notes + checks + unread)) }
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) { failed(batch, e, Texts.RECEIPT_FAILED) }
@@ -285,6 +283,7 @@ class JournalViewModel @Inject constructor(
 
     /** What went wrong, for the panel above the line; [fallback] for a failure that is not DeepSeek's. */
     private fun failed(batch: String, e: Exception, fallback: String = Texts.OPERATION_SAVE_FAILED) {
+        if (e is AiFailure) AppLog.w(TAG, "DeepSeek: ${e.javaClass.simpleName} ${e.detail}") else AppLog.e(TAG, "reading failed", e)
         val ai = if (e is AiFailure) {
             val message = when (e) {
                 is AiFailure.NoKey -> Texts.AI_NO_KEY
@@ -307,7 +306,7 @@ class JournalViewModel @Inject constructor(
         val built = DraftBuilder.build(a.draft, n.refs(), default, ZonedDateTime.now(clock))
         val currency = a.draft.currency ?: n.account(a.draft.accountId ?: default)?.currency
         val minor = currency?.let(Currencies::of)?.let { Decimal.parseHuman(a.draft.amount, it.exponent) }
-        val amount = if (minor != null) Format.money(minor, currency) else a.draft.amount
+        val amount = if (minor != null) Format.money(minor, currency) else a.draft.amount.ifBlank { "—" }
         val problems = buildList {
             addAll(built.problems.map(Texts::problem))
             if (!a.amountInText) add(Texts.AI_AMOUNT_NOT_IN_TEXT)
@@ -332,6 +331,7 @@ class JournalViewModel @Inject constructor(
         composer.update { it.copy(busy = true, saving = true) }
         val results = if (items.any { it.photos.isNotEmpty() }) ledger.saveWithPhotos(items.map { it.draft to it.photos })
             else ledger.saveAll(items.map { it.draft })
+        AppLog.i(TAG, "recorded ${items.size}: $results")
         val invalid = results.singleOrNull() as? SaveResult.Invalid
         if (invalid != null) {
             val updated = items.mapIndexed { i, item -> if (i == invalid.index) item.copy(problems = invalid.problems.map(Texts::problem)) else item }
@@ -367,7 +367,8 @@ class JournalViewModel @Inject constructor(
         request = viewModelScope.launch {
             try { save(result.items, c.batchId) }
             catch (e: CancellationException) { throw e }
-            catch (_: Exception) {
+            catch (e: Exception) {
+                AppLog.e(TAG, "recording failed", e)
                 composer.update { it.copy(busy = false, saving = false, ai = AiUi.Result(result.items)) }
                 notices.show(Notice(Texts.OPERATION_SAVE_FAILED))
             }
@@ -381,6 +382,7 @@ class JournalViewModel @Inject constructor(
     fun onDelete(id: String) {
         viewModelScope.launch {
             val removed = ledger.delete(id) ?: return@launch
+            AppLog.i(TAG, "deleted ${removed.tx.id} by a swipe")
             notices.show(Notice(Texts.deleted(describe(removed.tx)), Texts.RESTORE_ONE, undo = { ledger.undo(removed) }))
         }
     }
@@ -388,6 +390,14 @@ class JournalViewModel @Inject constructor(
     fun describe(tx: Transaction): String {
         val title = tx.description ?: tx.payee ?: names.value.categoryPath(tx.categoryId) ?: Texts.type(tx.type)
         return "$title ${Format.money(tx.amountMinor, tx.currency, withSign = tx.type == TxType.Income || tx.type == TxType.Refund)}"
+    }
+
+    /** What the person is shown to check or what is recorded at once, as the log keeps it. */
+    private fun logItems(source: String, items: List<AiItem>, notes: List<String> = emptyList()) {
+        AppLog.i(TAG, "read from $source: ${items.size} item(s)" + notes.joinToString("") { "\n  note: $it" } + items.joinToString("") { item ->
+            "\n  ${item.amount} · ${item.title} · ${item.draft.tags.joinToString(" ") { "#$it" }} · photos ${item.photos.size}" +
+                (item.caption?.let { "\n    $it" } ?: "") + (item.warnings + item.problems).joinToString("") { "\n    ! $it" }
+        })
     }
 
     fun onNeedMore() { if (state.value.hasMore) limit.update { it + PAGE } }
@@ -403,6 +413,7 @@ class JournalViewModel @Inject constructor(
 
     companion object {
         const val PAGE = 200
+        private const val TAG = "Journal"
         val EXPENSE_TYPES = setOf(TxType.Expense, TxType.Refund)
     }
 }

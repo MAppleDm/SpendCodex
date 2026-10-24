@@ -15,6 +15,7 @@ import dev.spendcodex.data.domain.Origin
 import dev.spendcodex.data.domain.Problem
 import dev.spendcodex.data.domain.Transaction
 import dev.spendcodex.data.domain.TxType
+import dev.spendcodex.data.log.AppLog
 import dev.spendcodex.data.repo.Ledger
 import dev.spendcodex.data.repo.SaveResult
 import dev.spendcodex.data.receipts.ReceiptPhoto
@@ -195,6 +196,7 @@ class OperationViewModel @Inject constructor(
             when (val r = ledger.save(f.draft, f.photos)) {
                 is SaveResult.Invalid -> form.update { it.copy(busy = false, problems = r.problems) }
                 is SaveResult.Saved -> {
+                    AppLog.i(TAG, "${if (f.existing == null) "recorded" else "saved"} ${r.tx.id} from the form, ${f.photos.size} photo(s)")
                     // a new record needs no word: it is in the journal, and a swipe deletes it
                     if (f.existing != null) notices.show(Notice(Texts.SAVED))
                     form.update { FormState() }
@@ -202,7 +204,7 @@ class OperationViewModel @Inject constructor(
                 }
             }
           } catch (e: CancellationException) { throw e }
-          catch (_: Exception) { form.update { it.copy(busy = false, photoMessage = Texts.OPERATION_SAVE_FAILED) } }
+          catch (e: Exception) { AppLog.e(TAG, "saving the form failed", e); form.update { it.copy(busy = false, photoMessage = Texts.OPERATION_SAVE_FAILED) } }
         }
     }
 
@@ -271,8 +273,8 @@ class OperationViewModel @Inject constructor(
                         } else current.copy(photos = current.photos + photo)
                     }
                 } catch (e: CancellationException) { throw e }
-                catch (_: Exception) { message = Texts.RECEIPT_FAILED }
-                catch (_: OutOfMemoryError) { message = Texts.RECEIPT_FAILED }
+                catch (e: Exception) { AppLog.w(TAG, "could not read a photo: $uri", e); message = Texts.RECEIPT_FAILED }
+                catch (e: OutOfMemoryError) { AppLog.w(TAG, "photo too large: $uri", e); message = Texts.RECEIPT_FAILED }
             }
             form.update { if (it.key == f.key) it.copy(photoBusy = false, photoMessage = message) else it }
         }
@@ -313,11 +315,13 @@ class OperationViewModel @Inject constructor(
                     it.copy(photoBusy = false, photoMessage = Texts.RECEIPT_DUPLICATE)
                     else it.copy(photos = it.photos + photo, photoBusy = false) }
             } catch (e: CancellationException) { throw e }
-            catch (_: Exception) { form.update { if (it.key == f.key) it.copy(photoBusy = false, photoMessage = Texts.RECEIPT_FAILED) else it } }
-            catch (_: OutOfMemoryError) { form.update { if (it.key == f.key) it.copy(photoBusy = false, photoMessage = Texts.RECEIPT_FAILED) else it } }
+            catch (e: Exception) { AppLog.w(TAG, "could not read the camera photo", e); form.update { if (it.key == f.key) it.copy(photoBusy = false, photoMessage = Texts.RECEIPT_FAILED) else it } }
+            catch (e: OutOfMemoryError) { AppLog.w(TAG, "camera photo too large", e); form.update { if (it.key == f.key) it.copy(photoBusy = false, photoMessage = Texts.RECEIPT_FAILED) else it } }
             finally { file.delete() }
         }
     }
 
     override fun onCleared() { camera.clear(); super.onCleared() }
+
+    private companion object { const val TAG = "Form" }
 }

@@ -21,6 +21,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import dev.spendcodex.coreui.AppTheme
 import dev.spendcodex.coreui.CoreTexts
 import dev.spendcodex.coreui.Palette
+import dev.spendcodex.data.log.AppLog
 import dev.spendcodex.data.settings.Language
 import dev.spendcodex.data.settings.Settings
 import dev.spendcodex.ui.AppRoot
@@ -94,6 +95,7 @@ class MainActivity : FragmentActivity() {
      */
     private fun takeShared(intent: Intent?) {
         val type = intent?.type ?: return
+        AppLog.i("App", "shared to the app: ${intent.action} $type")
         when {
             intent.action == Intent.ACTION_SEND && type.startsWith("text/") -> intent.getStringExtra(Intent.EXTRA_TEXT)?.let {
                 nav.home()
@@ -138,11 +140,13 @@ class MainActivity : FragmentActivity() {
 
     override fun onStop() {
         super.onStop()
+        AppLog.d("App", "background")
         lock.onBackground()
     }
 
     override fun onStart() {
         super.onStart()
+        AppLog.d("App", "foreground")
         lock.onForeground()
         journal.onForeground()
     }

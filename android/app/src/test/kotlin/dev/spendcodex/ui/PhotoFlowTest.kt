@@ -83,12 +83,11 @@ class PhotoFlowTest {
     private fun answer(args: String) = MockResponse().setResponseCode(200).setBody(
         """{"choices":[{"message":{"tool_calls":[{"id":"1","type":"function","function":{"name":"record_receipts","arguments":${Json.encodeToString(JsonPrimitive.serializer(), JsonPrimitive(args))}}}]}}]}""",
     )
-    private fun shop(total: String = "1290.50") = """{"status":"ok","receipts":[{"photos":[0],"payee":"Пятёрочка","date":"2026-10-19","time":"18:40","currency":"RUB","total":$total,"parts":[
-        {"amount":"840.50","category":"Продукты","description":"продукты","items":["Молоко 89.90","Сыр 750.60"],"tags":["продукты"]},
-        {"amount":"450","category":null,"description":"бытовая химия","items":["Средство для посуды 450.00"],"tags":["дом"]}]}]}"""
+    private fun shop(total: String = "\"1290.50\"") = """{"status":"ok","receipts":[{"photos":[0],"payee":"Пятёрочка","date":"2026-10-19","time":"18:40","currency":"RUB","total":$total,
+        "category":"Продукты","description":"продукты и бытовая химия","items":["Молоко 89.90","Сыр 750.60","Средство для посуды 450.00"],"tags":["продукты","дом"]}]}"""
 
-    @Test fun `a receipt photo is read, split by category, checked and recorded with the photo on every part`() {
-        server.enqueue(answer(shop("\"1290.50\"")))
+    @Test fun `a receipt photo is read as one purchase, checked and recorded with the photo`() {
+        server.enqueue(answer(shop()))
         show()
         compose.runOnIdle { vm.onText("такси 300") }
         compose.onNodeWithTag("open-photo").performClick()
@@ -99,36 +98,37 @@ class PhotoFlowTest {
         val body = server.takeRequest().body.readUtf8()
         assertTrue(body.contains("data:image/jpeg;base64,") && body.contains("record_receipts"))
 
-        // shown for a check, nothing recorded yet
+        // shown for a check, nothing recorded yet: one record for the whole receipt, its every line listed
         assertEquals(0, count())
         compose.onNodeWithTag("ai-photos").assertExists()
-        compose.onAllNodesWithTag("ai-item").assertCountEquals(2)
+        compose.onAllNodesWithTag("ai-item").assertCountEquals(1)
         compose.onNodeWithText(Texts.PHOTO_RESULT).assertExists()
-        compose.onNodeWithText("Молоко 89.90; Сыр 750.60").assertExists()
+        compose.onNodeWithText("Молоко 89.90; Сыр 750.60; Средство для посуды 450.00").assertExists()
         compose.onNodeWithTag("ai-note").assertDoesNotExist()
+        compose.onNodeWithTag("ai-edit").assertExists()
         compose.onNodeWithTag("ai-record").performClick()
-        settle { count() == 2 && vm.state.value.composer.ai == AiUi.Idle }
+        settle { count() == 1 && vm.state.value.composer.ai == AiUi.Idle }
 
-        val rows = runBlocking { env.ledger.feedNow(Filter(), 10) }
-        assertEquals(setOf(84050L, 45000L), rows.map { it.amountMinor }.toSet())
-        assertTrue(rows.all { it.payee == "Пятёрочка" && it.date == "2026-10-19" && it.receiptCount == 1 })
-        val receipts = rows.map { runBlocking { env.ledger.receiptsOf(it.id).single() } }
-        assertEquals(1, receipts.map { it.sha256 }.distinct().size)
+        val row = runBlocking { env.ledger.feedNow(Filter(), 10) }.single()
+        assertEquals(129050L, row.amountMinor)
+        assertTrue(row.payee == "Пятёрочка" && row.date == "2026-10-19" && row.receiptCount == 1)
         // the line was not part of it, and stays
         assertEquals("такси 300", vm.state.value.composer.text)
         assertFalse(vm.state.value.composer.fromPhotos)
     }
 
-    @Test fun `parts that do not add up are flagged, and dropping the answer records nothing`() {
-        server.enqueue(answer(shop("\"1300.00\"")))
+    @Test fun `a receipt without a total asks for the amount, and dropping the answer records nothing`() {
+        server.enqueue(answer(shop("null")))
         show()
         compose.runOnIdle { vm.onPhotos(listOf(receiptPhoto("a.jpg"), receiptPhoto("b.jpg"))) }
         settle { vm.state.value.composer.ai is AiUi.Result }
-        val notes = (vm.state.value.composer.ai as AiUi.Result).notes
-        assertTrue(notes.any { it.contains("не сходятся") && it.contains("Пятёрочка") })
+        val result = vm.state.value.composer.ai as AiUi.Result
+        assertTrue(result.notes.contains(Texts.receiptNoTotal(Texts.receiptLabel("Пятёрочка", 0))))
         // the second photo is on no receipt
-        assertTrue(notes.contains(Texts.photoUnread(2)))
+        assertTrue(result.notes.contains(Texts.photoUnread(2)))
         compose.onAllNodesWithTag("ai-note").assertCountEquals(2)
+        assertEquals("—", result.items.single().amount)
+        compose.onNodeWithTag("ai-record").assertIsNotEnabled()
         compose.onNodeWithText(Texts.AI_DROP).performClick()
         settle { vm.state.value.composer.ai == AiUi.Idle }
         assertEquals(0, count())

@@ -1,15 +1,29 @@
 package dev.spendcodex
 
 import android.app.Application
+import android.os.Build
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.HiltAndroidApp
 import dagger.hilt.components.SingletonComponent
+import dev.spendcodex.data.log.AppLog
+import java.io.File
+import java.time.ZoneId
+import java.util.Locale
 import javax.inject.Named
 
 @HiltAndroidApp
-class SpendApp : Application()
+class SpendApp : Application() {
+    override fun onCreate() {
+        // first, so that everything after it, a crash included, is in the logs folder
+        AppLog.init(File(filesDir, "logs"))
+        AppLog.catchCrashes()
+        AppLog.i("App", "start: SpendCodex ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}, ${BuildConfig.BUILD_TYPE}), " +
+            "Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT}), ${Build.MANUFACTURER} ${Build.MODEL}, ${Locale.getDefault()}, ${ZoneId.systemDefault()}")
+        super.onCreate()
+    }
+}
 
 @Module
 @InstallIn(SingletonComponent::class)

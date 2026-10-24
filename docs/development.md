@@ -36,12 +36,13 @@ JVM only (Robolectric with real SQLite), no emulator needed. What they cover:
 | `BackupTest` | export → restore → export is identical; bare JSON; archive layout and checksums; exact amount strings; CSV quoting and formula guard; the AI package; damaged, foreign, newer, partial and inconsistent files refused with nothing changed; 50 000 operations |
 | `ReceiptTest` | real JPEG compression and all EXIF orientations; originals; atomic save/delete/undo; a receipt split by category saved with its photo on every part, all or nothing; the downsized copy sent to DeepSeek; duplicates and limits; exact photo round-trips and safety copies; missing/damaged/oversized/unsafe archives; staging-loss rollback; v1 JSON/ZIP compatibility |
 | `ReceiptFlowTest` | gallery and camera output, duplicate selection, viewer, removal/undo, pending changes and abandonment; optional screenshots via `-Pscreenshots=../docs/screenshots` |
-| `AiReaderTest` | the forced DeepSeek tool, expense-only schema, generated tags and vocabulary, exact amounts, malformed batches, truncation, invalid fields, errors and redacted keys; photos as images with `record_receipts`, parts per category, totals that do not add up, wrong photo numbers, unreadable/non-purchase/refund photos |
+| `AiReaderTest` | the forced DeepSeek tool, expense-only schema, generated tags and vocabulary, exact amounts, malformed batches, truncation, invalid fields, errors and redacted keys; photos as images with `record_receipts`, one expense per receipt for its printed total (an order on two screenshots with delivery and discounts is one), separate receipts, a missing or non-positive total left for the person, wrong photo numbers, unreadable/non-purchase/refund photos |
+| `AppLogTest` | log lines in one folder, keys masked, stack traces, the folder as a .zip with extra files, clearing |
 | `PaletteTest` | every palette (black & white, avocado; light and dark) keeps text at WCAG 4.5:1; the black & white look is unchanged; the choice persists and survives erasing |
 | `MigrationTest` | a database built from the exported v1 schema opens with today's app |
 | `JournalFlowTest` | secondary manual entry, expense-only feed/totals, legacy data preserved and editable, old income searchable explicitly |
 | `AiFlowTest` | primary DeepSeek input, automatic save and tags without an undo line, swipe-right delete and bring back, batch atomicity, currencies, no-key state, income rejection, network retry, cancellation and duplicate taps |
-| `PhotoFlowTest` | a receipt photo read, split by category, checked and recorded with the photo on every part while the line stays; parts that do not add up and unread photos flagged; dropping records nothing; an unreadable photo opens the form with it attached; no key, no upload |
+| `PhotoFlowTest` | a receipt photo read as one purchase, its whole list shown, checked and recorded with its photo while the line stays; a receipt without a total blocked until the amount is given, unread photos flagged; dropping records nothing; an unreadable photo opens the form with it attached; no key, no upload |
 
 ## Layout
 

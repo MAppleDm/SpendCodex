@@ -21,6 +21,7 @@ import dev.spendcodex.ui.Notice
 import dev.spendcodex.ui.Notices
 import dev.spendcodex.ui.search.Period
 import dev.spendcodex.ui.shareFile
+import dev.spendcodex.data.log.AppLog
 import java.time.Clock
 import java.time.LocalDate
 import javax.inject.Inject
@@ -129,7 +130,7 @@ class DataViewModel @Inject constructor(
                 withContext(Dispatchers.IO) {
                     context.contentResolver.openOutputStream(uri, "wt")!!.use { backups.write(kind, scopeFor(kind), it) }
                 }
-            }.isSuccess
+            }.onFailure { AppLog.e(TAG, "saving $kind failed", it) }.isSuccess
             if (ok && kind == ExportKind.Backup) settings.markBackup(clock.millis())
             ui.update { it.copy(busy = false, message = if (ok) Texts.FILE_SAVED else Texts.FILE_FAILED, messageError = !ok) }
         }
@@ -142,7 +143,7 @@ class DataViewModel @Inject constructor(
                 shareFile(context, backups.fileName(kind), kind.mime, Texts.SHARE_TITLE) { out ->
                     withContext(Dispatchers.IO) { backups.write(kind, scopeFor(kind), out) }
                 }
-            }.isSuccess
+            }.onFailure { AppLog.e(TAG, "sharing $kind failed", it) }.isSuccess
             if (ok && kind == ExportKind.Backup) settings.markBackup(clock.millis())
             ui.update { it.copy(busy = false, message = if (ok) null else Texts.FILE_FAILED, messageError = !ok) }
         }
@@ -156,7 +157,7 @@ class DataViewModel @Inject constructor(
                 withContext(Dispatchers.IO) {
                     context.contentResolver.openOutputStream(uri, "wt")!!.use { out -> backups.safetyCopy.inputStream().use { it.copyTo(out) } }
                 }
-            }.isSuccess
+            }.onFailure { AppLog.e(TAG, "saving the safety copy failed", it) }.isSuccess
             ui.update { it.copy(message = if (ok) Texts.FILE_SAVED else Texts.FILE_FAILED, messageError = !ok) }
         }
     }
@@ -172,7 +173,8 @@ class DataViewModel @Inject constructor(
         viewModelScope.launch {
             val result = runCatching {
                 withContext(Dispatchers.IO) { context.contentResolver.openInputStream(uri)!!.use { backups.read(it) } }
-            }.getOrElse { ReadResult.Failed(listOf(ImportError(dev.spendcodex.data.backup.ImportProblem.NotReadable, detail = it.message))) }
+            }.getOrElse { AppLog.e(TAG, "reading a backup failed", it); ReadResult.Failed(listOf(ImportError(dev.spendcodex.data.backup.ImportProblem.NotReadable, detail = it.message))) }
+            if (result is ReadResult.Failed) AppLog.w(TAG, "backup refused: ${result.errors}")
             if (sequence != readSequence) { (result as? ReadResult.Ok)?.preview?.close(); return@launch }
             ui.update {
                 it.copy(restore = when (result) {
@@ -194,6 +196,7 @@ class DataViewModel @Inject constructor(
         ui.update { it.copy(restore = ready.copy(busy = true)) }
         viewModelScope.launch {
             val ok = runCatching { backups.restore(ready.preview) }
+            ok.onSuccess { AppLog.i(TAG, "restored a backup") }.onFailure { AppLog.e(TAG, "restoring failed", it) }
             ui.update { it.copy(restore = RestoreUi.Idle) }
             safety.value = backups.hasSafetyCopy()
             if (ok.isSuccess) {
@@ -213,6 +216,8 @@ class DataViewModel @Inject constructor(
         ready?.preview?.close()
         ui.update { it.copy(restore = RestoreUi.Idle) }
     }
+
+    private companion object { const val TAG = "Data" }
 
     override fun onCleared() { (ui.value.restore as? RestoreUi.Ready)?.preview?.close(); super.onCleared() }
 }

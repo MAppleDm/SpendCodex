@@ -3,6 +3,7 @@ package dev.spendcodex.ui
 import android.content.Context
 import android.net.Uri
 import androidx.core.content.FileProvider
+import dev.spendcodex.data.log.AppLog
 import java.io.File
 
 /**
@@ -21,7 +22,7 @@ class CameraCapture(private val context: Context) {
         FileProvider.getUriForFile(context, "${context.packageName}.files", next)
     } catch (e: Exception) {
         clear()
-        android.util.Log.w("Receipts", "Could not prepare camera output", e)
+        AppLog.w("Camera", "could not prepare camera output", e)
         null
     }
 

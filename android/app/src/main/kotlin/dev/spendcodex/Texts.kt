@@ -83,9 +83,7 @@ object Texts {
     fun photosSkipped(n: Int) = t("Не удалось открыть фото: $n.", "Could not open photos: $n.")
     val PHOTOS_LIMIT get() = t("Разобраны первые 10 фото.", "Only the first 10 photos were read.")
     fun receiptLabel(payee: String?, n: Int) = payee?.let { t("Чек «$it»", "Receipt “$it”") } ?: t("Чек ${n + 1}", "Receipt ${n + 1}")
-    fun receiptMismatch(receipt: String, total: String) = t("$receipt: части не сходятся с итогом $total. Проверь суммы.",
-        "$receipt: the parts do not add up to the total $total. Check the amounts.")
-    fun receiptNoTotal(receipt: String) = t("$receipt: итог не найден. Проверь суммы.", "$receipt: no total found. Check the amounts.")
+    fun receiptNoTotal(receipt: String) = t("$receipt: итог не найден. Укажи сумму сам.", "$receipt: no total found. Enter the amount yourself.")
     val AI_AUTH get() = t("DeepSeek не принял ключ или на нём нет баланса.", "DeepSeek refused the key, or it has no balance.")
 
     fun issue(i: LineIssue): String = when (i) {
@@ -382,6 +380,14 @@ object Texts {
     )
     fun version(v: String) = t("Версия $v · MIT", "Version $v · MIT")
     val SOURCE get() = t("Исходный код на GitHub", "Source code on GitHub")
+    val LOGS get() = t("Отправить логи (.zip)", "Send logs (.zip)")
+    val LOGS_HINT get() = t(
+        "Что делало приложение: запросы к DeepSeek и его ответы, ошибки, сбои. Хранится только на телефоне, до 2 ГБ, старое удаляется само; «стереть всё» стирает и логи. Ключ DeepSeek в них не пишется, а твои записи и чеки — да: отправляй тому, кому доверяешь.",
+        "What the app did: DeepSeek requests and answers, errors, crashes. Kept only on this phone, up to 2 GB, the oldest removed by itself; \"erase everything\" erases the logs too. The DeepSeek key is never written, but your records and receipts are: send them only to someone you trust.",
+    )
+    val LOGS_FAILED get() = t("Не удалось собрать логи.", "Could not pack the logs.")
+    fun logsSize(bytes: Long) = if (bytes < 1_048_576) t("${(bytes + 1023) / 1024} КБ", "${(bytes + 1023) / 1024} KB")
+        else t(String.format(java.util.Locale.forLanguageTag("ru"), "%.1f МБ", bytes / 1_048_576.0), String.format(java.util.Locale.ROOT, "%.1f MB", bytes / 1_048_576.0))
     val ERASE get() = t("стереть всё", "erase everything")
     val ERASE_CONFIRM get() = t("нажми ещё раз, чтобы стереть", "tap again to erase")
     val ERASE_HINT get() = t("Журнал хранится только здесь. Без резервной копии стёртое не вернуть.", "The journal is kept only here. Without a backup, erased data is gone.")
@@ -391,11 +397,11 @@ object Texts {
     val AI_EXPLAIN get() = t(
         "Нажатие на стрелку отправляет твой текст в DeepSeek (модель deepseek-flash) с твоим ключом. Модель выделяет расходы, выбирает категории и добавляет теги. " +
             "После проверки записи сохраняются сразу; лишнюю запись можно смахнуть вправо. Неоднозначный ответ потребует уточнения. " +
-            "Фото чека, снятое камерой слева от строки или выбранное в галерее, тоже уходит в DeepSeek: чек делится по категориям и показывается для проверки перед записью. Фото уменьшается и отправляется без метаданных, а в записи хранится сжатая копия. " +
+            "Фото чека, снятое камерой слева от строки или выбранное в галерее, тоже уходит в DeepSeek: чек становится одной записью на сумму «Итого» со списком покупок и показывается для проверки перед записью. Фото уменьшается и отправляется без метаданных, а в записи хранится сжатая копия. " +
             "Вместе с текстом или фото отправляются текущая дата, часовой пояс, основная валюта, категории с ключевыми словами и названия тегов. История не отправляется. Нужны интернет и средства на API-аккаунте DeepSeek.",
         "The send arrow submits your text to DeepSeek (the deepseek-flash model) using your key. The model extracts expenses, chooses categories and adds tags. " +
             "Validated records save immediately; swipe a mistaken one right to delete it. Unclear answers need clarification. " +
-            "A receipt photo, taken with the camera left of the line or chosen from the gallery, also goes to DeepSeek: the receipt is split by category and shown for a check before recording. The photo is sent downsized and without metadata; the record keeps a compressed copy. " +
+            "A receipt photo, taken with the camera left of the line or chosen from the gallery, also goes to DeepSeek: the receipt becomes one record for its printed total, with the list of what was bought, and is shown for a check before recording. The photo is sent downsized and without metadata; the record keeps a compressed copy. " +
             "The request includes today's date, time zone, default currency, categories with keywords and tag names. Past records are not sent. Internet and a funded DeepSeek API account are required.",
     )
     val AI_KEY get() = t("Ключ DeepSeek", "DeepSeek key")

@@ -244,7 +244,8 @@ private fun AiPanel(c: ComposerState, vm: JournalViewModel, onForm: () -> Unit, 
                     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).testTag("ai-item"), verticalAlignment = Alignment.Top) {
                         Column(Modifier.weight(1f)) {
                             Text(item.title, style = AppTheme.type.body, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            item.caption?.let { Text(it, style = AppTheme.type.caption, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+                            // a receipt's whole list is what is being checked
+                            item.caption?.let { Text(it, style = AppTheme.type.caption, maxLines = if (c.fromPhotos) 12 else 2, overflow = TextOverflow.Ellipsis) }
                             if (item.draft.tags.isNotEmpty()) Text(item.draft.tags.joinToString(" ") { "#$it" }, style = AppTheme.type.caption)
                             item.warnings.forEach { Text(it, style = AppTheme.type.caption.copy(color = AppTheme.colors.time)) }
                             item.problems.forEach { Text(it, style = AppTheme.type.caption.copy(color = AppTheme.colors.error)) }

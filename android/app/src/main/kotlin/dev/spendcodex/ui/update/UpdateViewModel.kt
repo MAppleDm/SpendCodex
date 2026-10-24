@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.spendcodex.BuildConfig
+import dev.spendcodex.data.log.AppLog
 import java.io.File
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -36,6 +37,7 @@ class UpdateViewModel @Inject constructor(private val repository: UpdateReposito
         task = viewModelScope.launch {
             try {
                 val release = repository.latest()
+                AppLog.i(TAG, "latest release: ${release?.tag ?: "none"}, installed $installed")
                 mutable.value = when {
                     release == null -> UpdateState(UpdatePhase.NoReleases)
                     release.version <= installed -> UpdateState(UpdatePhase.Current)
@@ -43,6 +45,7 @@ class UpdateViewModel @Inject constructor(private val repository: UpdateReposito
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
+                AppLog.w(TAG, "check failed", e)
                 mutable.value = UpdateState(problem = e.problem(UpdateProblem.Network))
             }
         }
@@ -52,9 +55,11 @@ class UpdateViewModel @Inject constructor(private val repository: UpdateReposito
         if (task?.isActive == true || state.value.phase != UpdatePhase.Available) return
         val release = state.value.release ?: return
         try {
+            AppLog.i(TAG, "downloading ${release.tag}")
             pending = repository.download(release)
             monitor(pending!!)
         } catch (e: Exception) {
+            AppLog.w(TAG, "download did not start", e)
             mutable.value = UpdateState(UpdatePhase.Available, release, problem = e.problem(UpdateProblem.Download))
         }
     }
@@ -69,6 +74,7 @@ class UpdateViewModel @Inject constructor(private val repository: UpdateReposito
                         UpdateTransfer.Complete -> {
                             mutable.value = UpdateState(UpdatePhase.Verifying, download.release)
                             repository.verifiedFile(download)
+                            AppLog.i(TAG, "${download.release.tag} downloaded and verified")
                             mutable.value = UpdateState(UpdatePhase.Ready, download.release)
                             break
                         }
@@ -106,13 +112,16 @@ class UpdateViewModel @Inject constructor(private val repository: UpdateReposito
         }
     }
 
-    fun onInstallProblem(problem: UpdateProblem) { mutable.value = state.value.copy(problem = problem) }
+    fun onInstallProblem(problem: UpdateProblem) { AppLog.w(TAG, "install: $problem"); mutable.value = state.value.copy(problem = problem) }
 
     private fun failedDownload(download: PendingUpdate, error: Exception) {
+        AppLog.w(TAG, "update ${download.release.tag} failed", error)
         repository.cancel()
         pending = null
         mutable.value = UpdateState(UpdatePhase.Available, download.release, problem = error.problem(UpdateProblem.Download))
     }
 }
+
+private const val TAG = "Updates"
 
 private fun Exception.problem(fallback: UpdateProblem) = (this as? UpdateException)?.problem ?: fallback
