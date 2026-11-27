@@ -28,6 +28,8 @@ object Texts {
     val YESTERDAY get() = t("вчера", "yesterday")
     val BEFORE_YESTERDAY get() = t("позавчера", "2 days ago")
     val TODAY_NOTHING get() = t("ничего не потрачено", "nothing spent")
+    val JUMP_TO_DATE get() = t("Перейти к дате", "Jump to date")
+    val NO_ENTRIES_FOR_DAY get() = t("За этот день записей нет", "No entries for this day")
     val BALANCES get() = t("Остатки", "Balances")
     val BALANCE_NO_OPENING get() = t("без начального остатка", "no opening balance")
     fun balanceIncomplete(n: Int) = t("не учтено: $n в другой валюте", "not counted: $n in another currency")
@@ -137,11 +139,11 @@ object Texts {
     val PAYEE get() = t("Магазин или получатель", "Merchant or payee")
     val TAGS get() = t("Теги", "Tags")
     val TAGS_HINT get() = t("через пробел: работа отпуск", "separated by spaces: work trip")
-    val NOTE get() = t("Заметка", "Note")
+    val COMMENT get() = t("Комментарий", "Comment")
+    val COMMENT_HINT get() = t("Добавить комментарий…", "Add a comment…")
+    val OPERATION_DETAILS get() = t("Детали", "Details")
     val REFUND_OF get() = t("К покупке", "For the purchase")
     val REFUND_NONE get() = t("не связывать", "not linked")
-    val REPEAT get() = t("повторить сегодня", "repeat today")
-    val MAKE_REFUND get() = t("оформить возврат", "make a refund")
     val DELETE get() = t("удалить", "delete")
     val OTHER_DATE get() = t("другая дата", "another date")
     val PICK get() = t("выбрать", "choose")
@@ -257,8 +259,7 @@ object Texts {
     val RECEIPTS get() = t("Фото чеков", "Receipt photos")
     val RECEIPT_CAMERA get() = t("Камера", "Camera")
     val RECEIPT_GALLERY get() = t("Из галереи", "From gallery")
-    val RECEIPT_HINT get() = t("Фото сжимаются на телефоне и сохраняются вместе с операцией. Нажми на фото, чтобы прочитать чек.",
-        "Photos are compressed on this phone and saved with the operation. Tap a photo to read the receipt.")
+    val RECEIPT_ATTACH get() = t("Прикрепить фото чека", "Attach a receipt photo")
     val RECEIPT_PROCESSING get() = t("Подготавливаю фото…", "Preparing photos…")
     val RECEIPT_FAILED get() = t("Не удалось прочитать фото. Выбери другой снимок или обрежь его в галерее.", "Could not read the photo. Choose another image or crop it in your gallery.")
     val RECEIPT_CAMERA_FAILED get() = t("Не удалось открыть камеру. Можно выбрать фото из галереи.", "Could not open the camera. You can choose a photo from your gallery.")
@@ -374,16 +375,13 @@ object Texts {
     val LOCK_TITLE_ON get() = t("Включить блокировку", "Turn the lock on")
     val LOCK_TITLE_OFF get() = t("Выключить блокировку", "Turn the lock off")
     val ABOUT get() = t("О приложении", "About")
-    val ABOUT_TEXT get() = t(
-        "Журнал расходов с вводом через DeepSeek. Пиши обычным текстом — сумма, категория и теги появятся в записи. Для анализа выгрузи данные в любую модель или таблицу.",
-        "An expense journal with DeepSeek text entry. Write naturally to capture the amount, category and tags. Export your data to any model or spreadsheet for analysis.",
-    )
+    val MAINTENANCE get() = t("Обслуживание", "Maintenance")
     fun version(v: String) = t("Версия $v · MIT", "Version $v · MIT")
     val SOURCE get() = t("Исходный код на GitHub", "Source code on GitHub")
     val LOGS get() = t("Отправить логи (.zip)", "Send logs (.zip)")
     val LOGS_HINT get() = t(
-        "Что делало приложение: запросы к DeepSeek и его ответы, ошибки, сбои. Хранится только на телефоне, до 2 ГБ, старое удаляется само; «стереть всё» стирает и логи. Ключ DeepSeek в них не пишется, а твои записи и чеки — да: отправляй тому, кому доверяешь.",
-        "What the app did: DeepSeek requests and answers, errors, crashes. Kept only on this phone, up to 2 GB, the oldest removed by itself; \"erase everything\" erases the logs too. The DeepSeek key is never written, but your records and receipts are: send them only to someone you trust.",
+        "Логи могут содержать записи и чеки. Отправляй их только тому, кому доверяешь.",
+        "Logs may contain entries and receipts. Share them only with someone you trust.",
     )
     val LOGS_FAILED get() = t("Не удалось собрать логи.", "Could not pack the logs.")
     fun logsSize(bytes: Long) = if (bytes < 1_048_576) t("${(bytes + 1023) / 1024} КБ", "${(bytes + 1023) / 1024} KB")

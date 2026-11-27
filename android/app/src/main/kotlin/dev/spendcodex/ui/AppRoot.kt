@@ -24,10 +24,6 @@ import dev.spendcodex.Texts
 import dev.spendcodex.coreui.AppTheme
 import dev.spendcodex.data.backup.ExportScope
 import dev.spendcodex.data.domain.Filter
-import dev.spendcodex.ui.categories.CategoriesScreen
-import dev.spendcodex.ui.categories.CategoriesViewModel
-import dev.spendcodex.ui.categories.CategoryEditScreen
-import dev.spendcodex.ui.categories.TagEditScreen
 import dev.spendcodex.ui.data.DataScreen
 import dev.spendcodex.ui.data.DataViewModel
 import dev.spendcodex.ui.data.FormatDocScreen
@@ -59,7 +55,6 @@ class Screens(
     val journal: JournalViewModel,
     val operation: OperationViewModel,
     val search: SearchViewModel,
-    val categories: CategoriesViewModel,
     val data: DataViewModel,
     val settings: SettingsViewModel,
     val lock: LockViewModel,
@@ -99,10 +94,8 @@ private fun Pages(s: Screens) {
             }
         }
     }
-    LaunchedEffect(Unit) { s.categories.closed.collect { s.nav.back() } }
-
-    fun newOperation() {
-        val start = s.journal.formStart()
+    fun editDraft() {
+        val start = s.journal.draftToEdit() ?: return
         s.nav.push(Screen.Operation(OperationRequest.New(start.draft, start.photos), start.fromLine))
     }
 
@@ -118,7 +111,6 @@ private fun Pages(s: Screens) {
         if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
         when {
             e.isCtrlPressed && e.key == Key.F -> { if (top !is Screen.Search) s.nav.push(Screen.Search()); true }
-            e.isCtrlPressed && e.key == Key.N -> { if (top == Screen.Journal) newOperation(); true }
             e.isCtrlPressed && e.key == Key.S && top is Screen.Operation -> { s.operation.onSave(); true }
             e.key == Key.Escape -> s.nav.back()
             else -> false
@@ -132,7 +124,7 @@ private fun Pages(s: Screens) {
                 vm = s.journal,
                 effects = s.journal.effects,
                 onOpen = { id -> s.nav.push(Screen.Operation(OperationRequest.Edit(id))) },
-                onForm = ::newOperation,
+                onEditDraft = ::editDraft,
                 onSearch = { s.nav.push(Screen.Search()) },
                 onSettings = { s.nav.push(Screen.Settings) },
                 onAi = { s.nav.push(Screen.Ai) },
@@ -148,23 +140,6 @@ private fun Pages(s: Screens) {
                 SearchScreen(state, s.search, onBack = { s.nav.back() },
                     onOpen = { id -> s.nav.push(Screen.Operation(OperationRequest.Edit(id))) },
                     onExport = { f -> s.nav.push(Screen.Data(ExportScope(f))) })
-            }
-            Screen.Categories -> {
-                val state by s.categories.state.collectAsStateWithLifecycle()
-                CategoriesScreen(state, s.categories, onBack = { s.nav.back() },
-                    onOpen = { id, kind, parent -> s.nav.push(Screen.CategoryEdit(id, kind, parent)) },
-                    onOpenTag = { id -> s.nav.push(Screen.TagEdit(id)) })
-            }
-            is Screen.CategoryEdit -> {
-                LaunchedEffect(top.key) { s.categories.open(top.key, top.id, top.kind, top.parentId) }
-                val state by s.categories.state.collectAsStateWithLifecycle()
-                if (state.form.key == top.key) CategoryEditScreen(state, s.categories, onBack = { s.nav.back() },
-                    onAddSub = { kind, parent -> s.nav.push(Screen.CategoryEdit(null, kind, parent)) })
-            }
-            is Screen.TagEdit -> {
-                LaunchedEffect(top.key) { s.categories.openTag(top.key, top.id) }
-                val state by s.categories.state.collectAsStateWithLifecycle()
-                if (state.tagForm.key == top.key) TagEditScreen(state, s.categories, onBack = { s.nav.back() })
             }
             is Screen.Data -> {
                 LaunchedEffect(top.key) { s.data.open(top.key, top.scope) }
@@ -207,7 +182,6 @@ private fun SettingsPage(s: Screens) {
         update = update,
         onBack = { s.settings.onDisarm(); s.nav.back() },
         onData = { s.nav.push(Screen.Data()) },
-        onCategories = { s.nav.push(Screen.Categories) },
         onAi = { s.nav.push(Screen.Ai) },
         // turning the lock on or off is asked of the person with the same prompt that opens it
         onToggleLock = {

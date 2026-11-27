@@ -141,9 +141,12 @@ fun UnderlineField(
     capitalization: KeyboardCapitalization = KeyboardCapitalization.None,
     focusRequester: FocusRequester? = null,
     textAlign: TextAlign = TextAlign.Start,
+    textStyle: TextStyle? = null,
+    minLines: Int = 1,
+    underline: Boolean = true,
 ) {
     val t = AppTheme.type
-    val style = (if (mono) t.mono.copy(fontSize = 16.sp) else t.body).copy(textAlign = textAlign)
+    val style = (textStyle ?: if (mono) t.mono.copy(fontSize = 16.sp) else t.body).copy(textAlign = textAlign)
     Column(modifier) {
         Box(Modifier.padding(vertical = 8.dp)) {
             if (value.isEmpty()) {
@@ -154,6 +157,7 @@ fun UnderlineField(
                 onValueChange = onValueChange,
                 textStyle = style,
                 singleLine = singleLine,
+                minLines = minLines,
                 maxLines = if (singleLine) 1 else 8,
                 cursorBrush = SolidColor(AppTheme.colors.foreground),
                 keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction, capitalization = capitalization),
@@ -164,7 +168,7 @@ fun UnderlineField(
                     .semantics { if (placeholder.isNotEmpty()) contentDescription = placeholder },
             )
         }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(if (error) AppTheme.colors.error else AppTheme.colors.border))
+        if (underline) Box(Modifier.fillMaxWidth().height(1.dp).background(if (error) AppTheme.colors.error else AppTheme.colors.border))
     }
 }
 

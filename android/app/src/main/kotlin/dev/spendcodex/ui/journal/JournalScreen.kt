@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.size
@@ -35,6 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -44,16 +46,16 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.spendcodex.Format
 import dev.spendcodex.Texts
 import dev.spendcodex.coreui.AppTheme
 import dev.spendcodex.coreui.CameraIcon
-import dev.spendcodex.coreui.DateRow
 import dev.spendcodex.coreui.FeedNote
-import dev.spendcodex.coreui.FormIcon
 import dev.spendcodex.coreui.Hairline
 import dev.spendcodex.coreui.IconAction
 import dev.spendcodex.coreui.InputBar
@@ -68,15 +70,16 @@ import dev.spendcodex.data.db.TypeTotal
 import dev.spendcodex.data.domain.TxType
 import dev.spendcodex.data.receipts.ReceiptImages
 import dev.spendcodex.data.receipts.ReceiptPhoto
+import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 /**
- * Expenses, a daily total, and one text input with the receipt camera before it. Manual entry lives beside search in the
- * header; a swipe right deletes a record.
+ * Expenses, a daily total, and one text input with the receipt camera before it. A swipe right deletes a record.
  */
 @Composable
 fun JournalScreen(
@@ -84,7 +87,7 @@ fun JournalScreen(
     vm: JournalViewModel,
     effects: Flow<JournalEffect>,
     onOpen: (String) -> Unit,
-    onForm: () -> Unit,
+    onEditDraft: () -> Unit,
     onSearch: () -> Unit,
     onSettings: () -> Unit,
     onAi: () -> Unit,
@@ -92,37 +95,74 @@ fun JournalScreen(
 ) {
     val listState = rememberLazyListState()
     val haptic = LocalHapticFeedback.current
+    val focus = LocalFocusManager.current
     var choosing by remember { mutableStateOf(false) }
+    var calendarAnchor by remember { mutableStateOf<LocalDate?>(null) }
+    var jumpDate by remember { mutableStateOf<LocalDate?>(null) }
+    var selectedDate by remember { mutableStateOf<LocalDate?>(null) }
+    val feedItems = remember(state.rows, selectedDate) { feedItems(state.rows, selectedDate = selectedDate) }
+    val latestItems by rememberUpdatedState(feedItems)
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(AiReader.MAX_PHOTOS)) { vm.onPhotos(it) }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture(), vm::onCameraResult)
     val canPhoto = !state.composer.busy && !state.composer.saving && state.composer.ai !is AiUi.Result
+    fun openCalendar(date: LocalDate) {
+        focus.clearFocus()
+        calendarAnchor = date
+    }
+
+    calendarAnchor?.let { anchor ->
+        val oldest = state.days.lastOrNull()?.let { LocalDate.parse(it.date) } ?: state.today
+        val newest = state.days.firstOrNull()?.let { LocalDate.parse(it.date) } ?: state.today
+        JournalCalendar(anchor, minOf(oldest, state.today, anchor).year, maxOf(newest, state.today, anchor),
+            onDismiss = { calendarAnchor = null },
+            onSelect = { date ->
+                calendarAnchor = null
+                jumpDate = date
+            },
+        )
+    }
+    LaunchedEffect(jumpDate) {
+        val date = jumpDate ?: return@LaunchedEffect
+        vm.loadThrough(date)
+        selectedDate = date
+        val index = snapshotFlow { latestItems.indexOfFirst { it is FeedItem.Day && it.date == date } }.first { it >= 0 }
+        listState.scrollToItem(index)
+        val layout = listState.layoutInfo
+        val heading = layout.visibleItemsInfo.firstOrNull { it.index == index }
+        if (heading != null) {
+            // In a reversed list the heading would land at the bottom, with its entries below the viewport.
+            listState.scrollToItem(index, -(layout.viewportSize.height - heading.size).coerceAtLeast(0))
+        }
+        jumpDate = null
+    }
     LaunchedEffect(effects) {
         effects.collect {
             haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+            jumpDate = null
+            selectedDate = null
             listState.animateScrollToItem(0)
         }
     }
     Column(modifier.fillMaxSize().background(AppTheme.colors.background).statusBarsPadding().imePadding()) {
-        Header(state, onForm, onSearch, onSettings)
+        Header(state, { openCalendar(state.today) }, onSearch, onSettings)
         Hairline()
         Box(Modifier.weight(1f).fillMaxWidth()) {
-            if (state.loaded && state.rows.isEmpty()) {
+            if (state.loaded && feedItems.isEmpty()) {
                 Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(24.dp).testTag("empty")) {
                     Text(Texts.EMPTY_TITLE, style = AppTheme.type.body)
                     Text(Texts.EMPTY_HINT, style = AppTheme.type.secondary, modifier = Modifier.padding(top = 6.dp))
                 }
             } else {
-                val items = remember(state.rows) { feedItems(state.rows) }
-                LaunchedEffect(listState, items.size) {
+                LaunchedEffect(listState, feedItems.size, state.hasMore) {
                     snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
-                        .distinctUntilChanged().collect { if (it >= items.size - 8) vm.onNeedMore() }
+                        .distinctUntilChanged().collect { if (it >= feedItems.size - 8) vm.onNeedMore() }
                 }
                 LazyColumn(Modifier.fillMaxSize().testTag("feed"), state = listState, reverseLayout = true) {
-                    items(items, key = { it.key }) { item ->
+                    items(feedItems, key = { it.key }) { item ->
                         val animate = Modifier.animateItem(fadeInSpec = tween(120), placementSpec = tween(120), fadeOutSpec = null)
                         when (item) {
                             is FeedItem.Op -> OperationRow(item.row, onClick = { onOpen(item.row.id) }, modifier = animate, onDelete = { vm.onDelete(item.row.id) })
-                            is FeedItem.Day -> DateRow(Format.dayTitle(item.date, state.today), animate)
+                            is FeedItem.Day -> DayDivider(item, state.today, { openCalendar(item.date) }, animate)
                         }
                     }
                 }
@@ -137,7 +177,7 @@ fun JournalScreen(
                 if (notice.action != null) TextAction(notice.action, { vm.onNotice(notice) }, Modifier.testTag("notice-action"))
             }
         }
-        AiPanel(state.composer, vm, onForm, onAi)
+        AiPanel(state.composer, vm, onEditDraft, onAi)
         if (choosing && canPhoto) {
             Column(Modifier.fillMaxWidth().testTag("photo-choice")) {
                 Hairline()
@@ -180,17 +220,17 @@ fun JournalScreen(
 }
 
 @Composable
-private fun Header(state: JournalUiState, onForm: () -> Unit, onSearch: () -> Unit, onSettings: () -> Unit) {
+private fun Header(state: JournalUiState, onCalendar: () -> Unit, onSearch: () -> Unit, onSettings: () -> Unit) {
     val c = AppTheme.colors
     val line = todayLine(state.todayTotals)
     val glow = rememberGlow(line)
     Row(verticalAlignment = Alignment.Top) {
-        Column(Modifier.weight(1f).padding(start = 16.dp, top = 12.dp, bottom = 12.dp).testTag("summary")) {
+        Column(Modifier.weight(1f).clickable(onClickLabel = Texts.JUMP_TO_DATE, role = Role.Button, onClick = onCalendar)
+            .testTag("summary").padding(start = 16.dp, top = 12.dp, bottom = 12.dp)) {
             Text(Format.dayTitle(state.today, state.today), style = AppTheme.type.body.copy(fontFeatureSettings = "tnum"))
             Text(line, style = AppTheme.type.secondary.copy(fontFeatureSettings = "tnum", color = androidx.compose.ui.graphics.lerp(c.secondary, c.time, glow)),
                 maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
         }
-        IconAction(onForm, Texts.MANUAL_ENTRY, Modifier.padding(top = 4.dp).testTag("open-form"), enabled = !state.composer.saving) { FormIcon(it) }
         IconAction(onSearch, Texts.CD_SEARCH, Modifier.padding(top = 4.dp).testTag("open-search")) { SearchIcon(it) }
         IconAction(onSettings, Texts.CD_SETTINGS, Modifier.padding(top = 4.dp, end = 4.dp).testTag("open-settings")) { MoreIcon(it) }
     }
@@ -203,7 +243,7 @@ private fun todayLine(totals: List<TypeTotal>): String {
 }
 
 @Composable
-private fun AiPanel(c: ComposerState, vm: JournalViewModel, onForm: () -> Unit, onAi: () -> Unit) {
+private fun AiPanel(c: ComposerState, vm: JournalViewModel, onEditDraft: () -> Unit, onAi: () -> Unit) {
     when (val ai = c.ai) {
         AiUi.Idle -> Unit
         AiUi.Reading -> Column(Modifier.fillMaxWidth().testTag("ai-reading")) {
@@ -224,7 +264,6 @@ private fun AiPanel(c: ComposerState, vm: JournalViewModel, onForm: () -> Unit, 
             Hairline()
             FeedNote(ai.message, NoteTone.Error)
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-                TextAction(Texts.MANUAL_ENTRY, onForm, Modifier.testTag("ai-manual"), color = AppTheme.colors.secondary)
                 Spacer(Modifier.weight(1f))
                 if (ai.needsKey) TextAction(Texts.AI_CONNECT, onAi)
                 else if (ai.retryable) TextAction(Texts.AI_RETRY, vm::onAiRetry, Modifier.testTag("ai-retry"))
@@ -257,7 +296,7 @@ private fun AiPanel(c: ComposerState, vm: JournalViewModel, onForm: () -> Unit, 
             }
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
                 TextAction(Texts.AI_DROP, vm::onAiClose, color = AppTheme.colors.secondary, enabled = !c.busy)
-                if (ai.items.size == 1) TextAction(Texts.EDIT, onForm, Modifier.testTag("ai-edit"), enabled = !c.busy)
+                if (ai.items.size == 1) TextAction(Texts.EDIT, onEditDraft, Modifier.testTag("ai-edit"), enabled = !c.busy)
                 Spacer(Modifier.weight(1f))
                 TextAction(if (c.busy) "…" else Texts.AI_RECORD, vm::onAiRecord, Modifier.testTag("ai-record"),
                     enabled = !c.busy && ai.items.all { it.problems.isEmpty() })

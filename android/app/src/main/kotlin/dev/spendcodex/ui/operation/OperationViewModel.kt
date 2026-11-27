@@ -11,7 +11,6 @@ import dev.spendcodex.Texts
 import dev.spendcodex.data.domain.Draft
 import dev.spendcodex.data.domain.DraftBuilder
 import dev.spendcodex.data.domain.DraftTime
-import dev.spendcodex.data.domain.Origin
 import dev.spendcodex.data.domain.Problem
 import dev.spendcodex.data.domain.Transaction
 import dev.spendcodex.data.domain.TxType
@@ -31,7 +30,6 @@ import dev.spendcodex.ui.journal.Names
 import java.time.Clock
 import java.time.LocalDate
 import java.time.ZonedDateTime
-import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -48,7 +46,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CancellationException
 
 /** The parts of the form that open a list of choices under them. */
-enum class FormField { Currency, Account, ToAccount, Category, Date, Time, RefundOf }
+enum class FormField { Currency, Account, ToAccount, Category, Date, Time, RefundOf, Tags }
 
 data class FormState(
     val key: String? = null,
@@ -128,7 +126,7 @@ class OperationViewModel @Inject constructor(
     }
 
     private suspend fun load(key: String, draft: Draft, existing: Transaction?, newPhotos: List<ReceiptPhoto> = emptyList()) {
-        val recent = ledger.recentExpenses(40)
+        val recent = if (draft.type == TxType.Refund) ledger.recentExpenses(40) else emptyList()
         val target = draft.refundOf?.let { ledger.get(it) }
         val photos = existing?.let { tx -> ledger.receiptsOf(tx.id).map { ReceiptPhoto(it) } } ?: newPhotos
         form.update {
@@ -151,7 +149,8 @@ class OperationViewModel @Inject constructor(
     fun onOpen(field: FormField?) = form.update { it.copy(open = if (it.open == field) null else field) }
 
     fun onTags(text: String) = form.update {
-        it.copy(tagsText = text, draft = it.draft.copy(tags = text.split(' ', ',', ';').map { s -> s.trim().removePrefix("#") }.filter { s -> s.isNotEmpty() }))
+        val tags = text.split(' ', ',', ';').map { tag -> tag.trim().removePrefix("#") }.filter { tag -> tag.isNotEmpty() }
+        it.copy(tagsText = text, draft = it.draft.copy(tags = tags), problems = it.problems.filterNot { p -> p.field == Problem.Field.Tags })
     }
 
     fun onDate(date: LocalDate) = form.update {
@@ -216,33 +215,6 @@ class OperationViewModel @Inject constructor(
             notices.show(Notice(Texts.deleted(describe(tx)), Texts.RESTORE_ONE, undo = { ledger.undo(removed) }))
             form.update { FormState() }
             _effects.send(OperationEffect.Close())
-        }
-    }
-
-    fun onRepeat() {
-        if (form.value.busy || form.value.photoBusy) return
-        val tx = form.value.existing ?: return
-        if (tx.type != TxType.Expense) return
-        viewModelScope.launch {
-            val r = ledger.repeat(tx.id) as? SaveResult.Saved
-            if (r == null) {
-                form.update { it.copy(problems = listOf(Problem.AccountArchived)) }
-                return@launch
-            }
-            form.update { FormState() }
-            _effects.send(OperationEffect.Close(recorded = true))
-        }
-    }
-
-    /** Turns the page into a refund of this purchase, to be checked and recorded. */
-    fun onMakeRefund() {
-        if (form.value.busy || form.value.photoBusy) return
-        val tx = form.value.existing ?: return
-        viewModelScope.launch {
-            val draft = ledger.refundDraft(tx.id) ?: return@launch
-            val key = form.value.key ?: return@launch
-            form.value = FormState(key = key, loading = true)
-            load(key, draft.copy(id = UUID.randomUUID().toString(), amount = draft.amount.let { if (Lang.current.decimal == '.') it else it.replace('.', Lang.current.decimal) }), null)
         }
     }
 

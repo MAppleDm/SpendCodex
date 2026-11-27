@@ -22,17 +22,15 @@ Tags are optional in your text: DeepSeek adds relevant tags and reuses existing 
 Unclear amounts, currencies or dates need clarification. An amount absent from the original note cannot be accepted
 through the AI confirmation action. Network failures preserve the note for retry.
 
-**Manual entry** is the page-with-plus icon beside search in the header. It works offline without a key.
-The form includes amount, currency, category, date/time, merchant, tags, notes and receipt photos.
-Stored records support editing, repeating and purchase refunds. A swipe right (or Delete on the record) removes one,
-and the line that follows can bring it back.
+Tap the date in the header or a date divider in the journal to open the calendar and jump to a day.
+Tap a stored record to edit its comment, photos or details. A swipe right or the Delete action removes the record.
+The line that follows can bring it back.
 
 ## Expenses only
 
 The header shows today's spending per currency. SpendCodex counts spending, not balances: there are no payment methods,
 no default payment method and no card or cash balances.
-There is no new income, own-account transfer or balance-adjustment entry. Purchase refunds are created from the
-original expense and displayed separately.
+Previously recorded purchase refunds are shown separately.
 
 Older non-expense records remain intact. Find them under **Search → Type → Previously recorded operations**;
 full manual copies retain them. Default search and the main feed show expenses and refunds.
@@ -47,9 +45,8 @@ and discounts included) in the note and the photos attached. Screenshots of one 
 items, are one receipt. You check the result and tap **Record**. If no total was found, or a photo was not read, it says
 so before you record. Photos go to DeepSeek downsized and without metadata.
 
-To attach photos by hand, open a record, then **Receipt photos → Camera / From gallery**, up to 10 photos. Images are compressed on the phone;
-gallery originals stay intact. Tap a thumbnail to zoom. Photo changes apply on save and removal has undo.
-Repeating a purchase does not duplicate its old receipt.
+To attach up to 10 photos to a record, tap the edit icon next to **Receipt photos** and choose **Camera** or **From gallery**.
+The phone compresses the attached copies. Tap a thumbnail to zoom. Photo changes apply when you save the record.
 
 ## Data and precision
 

@@ -38,13 +38,16 @@ object Format {
 
     /** The heading of a day in the journal: "Сегодня, 20 октября", "Вчера, 19 октября", "18 октября, сб", "3 марта 2025, пн". */
     fun dayTitle(d: LocalDate, today: LocalDate): String {
-        val base = if (d.year == today.year) d.format(dayMonth) else d.format(dayMonthYear)
+        val base = feedDate(d, today)
         return when (d) {
             today -> Texts.TODAY.replaceFirstChar { it.uppercase() } + ", " + base
             today.minusDays(1) -> Texts.YESTERDAY.replaceFirstChar { it.uppercase() } + ", " + base
             else -> base + ", " + weekday(d)
         }
     }
+
+    fun feedDate(d: LocalDate, today: LocalDate): String =
+        d.format(if (d.year == today.year) dayMonth else dayMonthYear)
 
     /** A date in a line of text: "20 октября 2026". */
     fun date(d: LocalDate): String = d.format(dayMonthYear)

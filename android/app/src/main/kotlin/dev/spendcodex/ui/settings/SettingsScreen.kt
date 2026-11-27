@@ -42,10 +42,6 @@ import dev.spendcodex.ui.lock.LockSupport
 import dev.spendcodex.ui.update.UpdateBlock
 import dev.spendcodex.ui.update.UpdateState
 
-/**
- * What the "⋮" opens: where the data goes first, then the journal's lists, then the app's own choices. There are no payment
- * methods: the journal counts what was spent, not what is left on a card or in cash.
- */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
@@ -57,7 +53,6 @@ fun SettingsScreen(
     update: UpdateState,
     onBack: () -> Unit,
     onData: () -> Unit,
-    onCategories: () -> Unit,
     onAi: () -> Unit,
     onToggleLock: () -> Unit,
     onCheckUpdates: () -> Unit,
@@ -73,9 +68,15 @@ fun SettingsScreen(
     Column(modifier.fillMaxSize().background(c.background).statusBarsPadding()) {
         PageHeader(Texts.SETTINGS, onBack)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).navigationBarsPadding()) {
-            StatRow(Texts.DATA, "›", Modifier.testTag("settings-data"), onClick = onData)
-            StatRow(Texts.CATEGORIES_AND_TAGS, "›", Modifier.testTag("settings-categories"), onClick = onCategories)
+            StatRow(Texts.AI, if (state.hasKey) Texts.AI_KEY_SET else "›", Modifier.testTag("settings-ai"), onClick = onAi)
             Hairline()
+            SectionCaption(Texts.MAINTENANCE)
+            StatRow(Texts.DATA, "›", Modifier.testTag("settings-data"), onClick = onData)
+            val logs by produceState<Long?>(null, u.logsBusy) { value = vm.logsSize() }
+            StatRow(Texts.LOGS, if (u.logsBusy) "…" else logs?.let(Texts::logsSize).orEmpty() + " ↗", Modifier.testTag("settings-logs"),
+                enabled = !u.logsBusy, onClick = vm::onSendLogs)
+            Hint(if (u.logsFailed) Texts.LOGS_FAILED else Texts.LOGS_HINT, color = if (u.logsFailed) c.error else Color.Unspecified)
+            Hairline(Modifier.padding(top = 8.dp))
             StatRow(Texts.LANGUAGE, Texts.LANGUAGE_NAME, Modifier.testTag("settings-language"), onClick = vm::onLanguage)
             val theme by vm.theme.collectAsState()
             StatRow(Texts.THEME, Texts.themeName(Palette.of(theme)), Modifier.testTag("settings-theme"), onClick = vm::onTheme)
@@ -87,7 +88,6 @@ fun SettingsScreen(
                     }
                 }
             }
-            StatRow(Texts.AI, if (state.hasKey) Texts.AI_KEY_SET else "›", Modifier.testTag("settings-ai"), onClick = onAi)
             Hairline()
             StatRow(Texts.LOCK, if (lockOn) Texts.ON else Texts.OFF, Modifier.testTag("settings-lock"),
                 enabled = lockSupport == LockSupport.Ready || lockOn, onClick = onToggleLock)
@@ -100,13 +100,8 @@ fun SettingsScreen(
             UpdateBlock(update, onCheckUpdates, onDownloadUpdate, onCancelUpdate, onInstallUpdate) { onOpenUrl(dev.spendcodex.ui.update.RELEASES_URL) }
             Hairline(Modifier.padding(top = 8.dp))
             SectionCaption(Texts.ABOUT)
-            Hint(Texts.ABOUT_TEXT)
             Hint(Texts.version(version))
             StatRow(Texts.SOURCE, "↗", onClick = { onOpenUrl(dev.spendcodex.ui.update.SOURCE_URL) })
-            val logs by produceState<Long?>(null, u.logsBusy) { value = vm.logsSize() }
-            StatRow(Texts.LOGS, if (u.logsBusy) "…" else logs?.let(Texts::logsSize).orEmpty() + " ↗", Modifier.testTag("settings-logs"),
-                enabled = !u.logsBusy, onClick = vm::onSendLogs)
-            Hint(if (u.logsFailed) Texts.LOGS_FAILED else Texts.LOGS_HINT, color = if (u.logsFailed) c.error else Color.Unspecified)
             Hairline(Modifier.padding(top = 8.dp))
             Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(Texts.ERASE_HINT, style = AppTheme.type.caption, modifier = Modifier.weight(1f))

@@ -27,7 +27,6 @@ import dev.spendcodex.data.settings.Settings
 import dev.spendcodex.ui.AppRoot
 import dev.spendcodex.ui.NavViewModel
 import dev.spendcodex.ui.Screens
-import dev.spendcodex.ui.categories.CategoriesViewModel
 import dev.spendcodex.ui.data.DataViewModel
 import dev.spendcodex.ui.journal.JournalViewModel
 import dev.spendcodex.ui.lock.AppLock
@@ -49,7 +48,6 @@ class MainActivity : FragmentActivity() {
     private val journal: JournalViewModel by viewModels()
     private val operation: OperationViewModel by viewModels()
     private val search: SearchViewModel by viewModels()
-    private val categories: CategoriesViewModel by viewModels()
     private val data: DataViewModel by viewModels()
     private val settingsModel: SettingsViewModel by viewModels()
     private val lockModel: LockViewModel by viewModels()
@@ -61,7 +59,7 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val screens = Screens(nav, journal, operation, search, categories, data, settingsModel, lockModel, updates)
+        val screens = Screens(nav, journal, operation, search, data, settingsModel, lockModel, updates)
         // Follows the system light/dark setting in the chosen palette; there is no dynamic (wallpaper) colour. A new
         // language rebuilds the screens (the view models and their state stay).
         setContent {

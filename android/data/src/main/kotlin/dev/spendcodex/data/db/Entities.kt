@@ -162,6 +162,8 @@ data class FeedRow(
 )
 
 /** Sums of a set of records by currency and type, for the line above search results. */
+data class FeedDay(val date: String, val count: Int)
+
 data class TypeTotal(val currency: String, val type: String, val total: Long, val count: Int)
 
 /** The database's half of a balance (see [dev.spendcodex.data.domain.Balances]). */

@@ -16,7 +16,7 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 - DeepSeek against a stand-in: `./gradlew assembleDebug -PmodelBaseUrl=http://10.0.2.2:8090`.
 - Text shared from another app ("Share" → SpendCodex) lands in the quick line. Handy for typing Cyrillic on an emulator:
   `adb shell "am start -a android.intent.action.SEND -t text/plain --es android.intent.extra.TEXT 'кофе 4.50' -n dev.spendcodex/.MainActivity"`.
-- Hardware keyboard: Enter records, Shift+Enter starts another operation, Ctrl+N opens the full form, Ctrl+F the search,
+- Hardware keyboard: Enter records, Shift+Enter starts another operation, Ctrl+F opens search,
   Ctrl+S saves the form, Esc goes back.
 
 ## Tests
@@ -40,9 +40,9 @@ JVM only (Robolectric with real SQLite), no emulator needed. What they cover:
 | `AppLogTest` | log lines in one folder, keys masked, stack traces, the folder as a .zip with extra files, clearing |
 | `PaletteTest` | every palette (black & white, avocado; light and dark) keeps text at WCAG 4.5:1; the black & white look is unchanged; the choice persists and survives erasing |
 | `MigrationTest` | a database built from the exported v1 schema opens with today's app |
-| `JournalFlowTest` | secondary manual entry, expense-only feed/totals, legacy data preserved and editable, old income searchable explicitly |
+| `JournalFlowTest` | calendar jumps, expense-only feed/totals, legacy data preserved and editable, old income searchable explicitly |
 | `AiFlowTest` | primary DeepSeek input, automatic save and tags without an undo line, swipe-right delete and bring back, batch atomicity, currencies, no-key state, income rejection, network retry, cancellation and duplicate taps |
-| `PhotoFlowTest` | a receipt photo read as one purchase, its whole list shown, checked and recorded with its photo while the line stays; a receipt without a total blocked until the amount is given, unread photos flagged; dropping records nothing; an unreadable photo opens the form with it attached; no key, no upload |
+| `PhotoFlowTest` | a receipt photo read as one purchase, its whole list shown, checked and recorded with its photo while the line stays; a receipt without a total blocked until the amount is given, unread photos flagged; dropping records nothing; no key, no upload |
 
 ## Layout
 
@@ -75,10 +75,10 @@ base64 `image_url` parts of the user message (see [the vision guide](https://api
 The key is provided by the user; tests use MockWebServer, never a paid account. The original typed note is retained in
 `input_text`, with `origin=ai`. Categories and generated tags are classifications, not additional financial facts.
 
-No automatic fallback to QuickLine exists. No key/network: keep the note and offer retry, key setup or the manual form.
+If the key or network is unavailable, the app keeps the note and offers key setup or a retry.
 Ordinary validated expense batches save atomically; unknown references require review; invalid money/date/currency blocks
 saving. Amounts absent from the text cannot be accepted through the AI confirmation action. Editing/cancelling input cancels
-the HTTP call; stable batch IDs and a synchronous busy guard prevent duplicate saves. Manual entry and stored history work offline.
+the HTTP call; stable batch IDs and a synchronous busy guard prevent duplicate saves. Stored history remains available offline.
 
 Room schema and JSON format remain version 2. The old `ai_enabled` preference is round-tripped for compatibility but no longer
 gates primary input. Non-expense records and account opening amounts remain intact; only expenses/refunds appear in the main

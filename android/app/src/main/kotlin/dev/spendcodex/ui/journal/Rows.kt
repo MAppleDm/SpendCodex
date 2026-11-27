@@ -26,7 +26,7 @@ sealed interface FeedItem {
         override val key: String get() = row.id
     }
 
-    data class Day(val date: LocalDate) : FeedItem {
+    data class Day(val date: LocalDate, val empty: Boolean = false) : FeedItem {
         override val key: String get() = "day-$date"
     }
 }
@@ -35,19 +35,25 @@ sealed interface FeedItem {
  * Rows newest first with each day's heading after its rows: in a list laid out from the bottom (the journal) the heading
  * comes out above its day. [headingFirst] puts it before them, for a list read from the top (search).
  */
-fun feedItems(rows: List<FeedRow>, headingFirst: Boolean = false): List<FeedItem> {
+fun feedItems(rows: List<FeedRow>, headingFirst: Boolean = false, selectedDate: LocalDate? = null): List<FeedItem> {
     val out = ArrayList<FeedItem>(rows.size + rows.size / 4 + 1)
+    var pendingDate = selectedDate
     var i = 0
     while (i < rows.size) {
         val date = rows[i].date
         var j = i
         while (j < rows.size && rows[j].date == date) j++
         val day = FeedItem.Day(LocalDate.parse(date))
+        pendingDate?.let { selected ->
+            if (selected > day.date) out += FeedItem.Day(selected, empty = true)
+            if (selected >= day.date) pendingDate = null
+        }
         if (headingFirst) out += day
         for (k in i until j) out += FeedItem.Op(rows[k])
         if (!headingFirst) out += day
         i = j
     }
+    pendingDate?.let { out += FeedItem.Day(it, empty = true) }
     return out
 }
 

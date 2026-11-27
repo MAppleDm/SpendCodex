@@ -3,7 +3,6 @@ package dev.spendcodex.ui
 import androidx.lifecycle.ViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.spendcodex.data.backup.ExportScope
-import dev.spendcodex.data.domain.CategoryKind
 import dev.spendcodex.data.domain.Draft
 import dev.spendcodex.data.domain.Filter
 import dev.spendcodex.data.receipts.ReceiptPhoto
@@ -32,9 +31,6 @@ sealed interface Screen {
     /** [fromLine]: opened with what the quick line had; recording it here clears the line. */
     data class Operation(val request: OperationRequest, val fromLine: Boolean = false, override val key: String = UUID.randomUUID().toString()) : Screen
     data class Search(val filter: Filter = Filter(), override val key: String = UUID.randomUUID().toString()) : Screen
-    data object Categories : Screen { override val key = "categories" }
-    data class CategoryEdit(val id: String?, val kind: CategoryKind, val parentId: String?, override val key: String = UUID.randomUUID().toString()) : Screen
-    data class TagEdit(val id: String, override val key: String = UUID.randomUUID().toString()) : Screen
     data class Data(val scope: ExportScope? = null, override val key: String = UUID.randomUUID().toString()) : Screen
     data object Settings : Screen { override val key = "settings" }
     data object Ai : Screen { override val key = "ai" }

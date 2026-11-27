@@ -126,6 +126,8 @@ class Ledger @Inject constructor(
 
     suspend fun feedNow(filter: Filter, limit: Int): List<FeedRow> = dao.feedNow(FeedSql.feed(filter, limit))
 
+    fun feedDays(types: Set<TxType>) = dao.feedDays(types.map { it.code })
+
     fun totals(filter: Filter): Flow<List<TypeTotal>> = dao.totals(FeedSql.totals(filter))
 
     suspend fun totalsNow(filter: Filter): List<TypeTotal> = dao.totalsNow(FeedSql.totals(filter))

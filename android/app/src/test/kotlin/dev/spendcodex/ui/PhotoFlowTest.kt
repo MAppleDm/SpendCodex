@@ -135,17 +135,15 @@ class PhotoFlowTest {
         assertTrue(vm.state.value.composer.photos.isEmpty())
     }
 
-    @Test fun `an unreadable photo explains itself and the manual form starts with the photo attached`() {
+    @Test fun `an unreadable photo reports the error without making a draft`() {
         server.enqueue(answer("""{"status":"unreadable","receipts":[]}"""))
         show()
         compose.runOnIdle { vm.onPhotos(listOf(receiptPhoto())) }
         settle { vm.state.value.composer.ai is AiUi.Failed }
         assertEquals(Texts.PHOTO_UNREADABLE, (vm.state.value.composer.ai as AiUi.Failed).message)
-        compose.onNodeWithTag("ai-manual").assertExists()
-        val start = vm.formStart()
-        assertFalse(start.fromLine)
-        assertEquals(start.draft.id, start.photos.single().receipt.transactionId)
-        assertEquals(AiUi.Idle, vm.state.value.composer.ai)
+        compose.onNodeWithTag("ai-manual").assertDoesNotExist()
+        assertNull(vm.draftToEdit())
+        assertEquals(0, count())
     }
 
     @Test fun `without a key no photo is sent`() {

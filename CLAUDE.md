@@ -9,8 +9,8 @@ A personal expense journal for Android (Kotlin, Compose, Room, Hilt) in `android
   methods, a default payment method, card/cash/bank balances, transfers, adjustments or opening amounts, in the UI or in
   the DeepSeek request. The schema keeps one unseen account per record only for format compatibility.
 - Expenses only (and refunds of a purchase); no new income.
-- Every typed line goes to DeepSeek (the user's own key), which reads expenses, picks categories and adds tags. Manual
-  entry is the secondary icon beside search.
+- Every typed line goes to DeepSeek (the user's own key), which reads expenses, picks categories and adds tags.
+  Tap the date at the top of the journal or a date divider to jump to a day.
 - Old records and backups are never deleted or reinterpreted by an update. Money is `Long` minor units, never floating point.
 - Backups were not asked for: keep the existing feature, do not push it.
 

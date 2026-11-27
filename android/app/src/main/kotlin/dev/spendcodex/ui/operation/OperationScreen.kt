@@ -1,6 +1,7 @@
 package dev.spendcodex.ui.operation
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -15,27 +16,36 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.spendcodex.Format
 import dev.spendcodex.Texts
 import dev.spendcodex.coreui.AppTheme
+import dev.spendcodex.coreui.ChevronIcon
 import dev.spendcodex.coreui.ChoiceRow
-import dev.spendcodex.coreui.Hairline
-import dev.spendcodex.coreui.Hint
 import dev.spendcodex.coreui.PageHeader
 import dev.spendcodex.coreui.StatRow
 import dev.spendcodex.coreui.TextAction
@@ -47,7 +57,7 @@ import dev.spendcodex.data.domain.DraftTime
 import dev.spendcodex.data.domain.Problem
 import dev.spendcodex.data.domain.TxType
 
-/** A whole operation, every field of it: for a new one when the line is not enough, and for changing a recorded one. */
+/** The editable card for an existing operation or a draft from DeepSeek. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun OperationScreen(state: OperationUiState, vm: OperationViewModel, onBack: () -> Unit, modifier: Modifier = Modifier) {
@@ -61,6 +71,13 @@ fun OperationScreen(state: OperationUiState, vm: OperationViewModel, onBack: () 
     // missing account: the journal gets its one account when the record is stored)
     val shown = (f.problems.ifEmpty { live.filterNot { it == Problem.AmountMissing || it == Problem.AccountMissing } })
     fun problemsOf(field: Problem.Field) = shown.filter { it.field == field }
+    val detailsHaveErrors = shown.any {
+        when (it.field) {
+            Problem.Field.Amount, Problem.Field.Currency, Problem.Field.Note, Problem.Field.Tags -> false
+            else -> true
+        }
+    }
+    var showDetails by rememberSaveable(f.key) { mutableStateOf(false) }
     val amountFocus = remember { FocusRequester() }
     LaunchedEffect(f.key, f.loading) {
         if (!f.loading && f.existing == null && d.amount.isBlank()) runCatching { amountFocus.requestFocus() }
@@ -75,20 +92,21 @@ fun OperationScreen(state: OperationUiState, vm: OperationViewModel, onBack: () 
         }
         if (f.loading) return@Column
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).navigationBarsPadding()) {
-            // New entries are expenses. Existing records keep their original type for lossless editing.
-            if (d.type != TxType.Expense) StatRow(Texts.TYPES, Texts.typeTitle(d.type), enabled = false)
-
-            // the amount and its currency
             val account = names.account(d.accountId ?: state.defaultAccountId)
             val currency = (if (d.type == TxType.Transfer || d.type == TxType.Adjustment) account?.currency else d.currency ?: account?.currency) ?: ""
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 UnderlineField(
                     d.amount, { v -> vm.update { it.copy(amount = v.filter { ch -> ch.isDigit() || ch in ".,-  " }) } },
                     Modifier.weight(1f).testTag("form-amount"),
                     placeholder = if (d.type == TxType.Adjustment) "−0" else "0",
                     keyboardType = if (d.type == TxType.Adjustment) KeyboardType.Text else KeyboardType.Decimal,
-                    imeAction = ImeAction.Next, mono = true, error = problemsOf(Problem.Field.Amount).isNotEmpty(),
+                    imeAction = ImeAction.Next,
                     focusRequester = amountFocus,
+                    textStyle = t.mono.copy(fontSize = 36.sp, lineHeight = 44.sp, fontWeight = FontWeight.Medium),
+                    underline = false,
                 )
                 Spacer(Modifier.width(12.dp))
                 Token(Format.sign(currency).ifEmpty { "?" } + if (currency.isNotEmpty() && Format.sign(currency) != currency) " $currency" else "",
@@ -105,122 +123,203 @@ fun OperationScreen(state: OperationUiState, vm: OperationViewModel, onBack: () 
                 }
             }
 
-            // No payment method: the journal counts spending, not what is left on a card or in cash, so a record has no
-            // account to choose (it is booked to the journal's one, unseen). Only an old transfer or adjustment, from before
-            // 0.3, is about accounts by nature and still says which.
-            Hairline(Modifier.padding(top = 8.dp))
-            if (d.type != TxType.Transfer && d.type != TxType.Adjustment) {
-                Errors(problemsOf(Problem.Field.Account) + problemsOf(Problem.Field.AccountAmount))
-            } else {
-                StatRow(Texts.ACCOUNT, account?.name ?: "?", Modifier.testTag("form-account"), onClick = { vm.onOpen(FormField.Account) })
-                if (f.open == FormField.Account) AccountChoices(names, d.accountId ?: state.defaultAccountId) { id -> vm.update { it.copy(accountId = id) }; vm.onOpen(null) }
-                Errors(problemsOf(Problem.Field.Account))
+            UnderlineField(
+                d.description, { value -> vm.update { it.copy(description = value) } },
+                Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 14.dp).testTag("form-description"),
+                placeholder = Texts.DESCRIPTION, imeAction = ImeAction.Next, capitalization = KeyboardCapitalization.Sentences,
+                textStyle = t.body.copy(fontSize = 19.sp, lineHeight = 26.sp), underline = false,
+            )
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                    .clip(RoundedCornerShape(22.dp)).background(lerp(c.background, c.pressed, 0.65f))
+                    .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 8.dp),
+            ) {
+                Text(Texts.COMMENT, style = t.body.copy(fontWeight = FontWeight.Medium))
+                UnderlineField(
+                    d.note, { value -> vm.update { it.copy(note = value) } },
+                    Modifier.fillMaxWidth().testTag("form-note"), placeholder = Texts.COMMENT_HINT,
+                    singleLine = false, imeAction = ImeAction.Default, capitalization = KeyboardCapitalization.Sentences,
+                    minLines = 3, underline = false,
+                )
             }
-            if (d.type == TxType.Transfer) {
-                val to = names.account(d.toAccountId)
-                StatRow(Texts.TO_ACCOUNT, to?.name ?: "?", Modifier.testTag("form-to-account"), onClick = { vm.onOpen(FormField.ToAccount) })
-                if (f.open == FormField.ToAccount) AccountChoices(names, d.toAccountId) { id -> vm.update { it.copy(toAccountId = id) }; vm.onOpen(null) }
-                Errors(problemsOf(Problem.Field.ToAccount))
-                if (to != null && account != null && to.currency != account.currency) {
-                    Column(Modifier.padding(horizontal = 16.dp)) {
-                        UnderlineField(d.toAmount, { v -> vm.update { it.copy(toAmount = v) } }, Modifier.testTag("form-to-amount"),
-                            placeholder = Texts.toAmount(to.currency), keyboardType = KeyboardType.Decimal, mono = true,
-                            error = problemsOf(Problem.Field.ToAmount).isNotEmpty())
-                    }
-                    Errors(problemsOf(Problem.Field.ToAmount))
-                }
-            }
-
-            // the category
-            val kind = d.type.categoryKind
-            if (kind != null) {
-                StatRow(Texts.CATEGORY, names.categoryPath(d.categoryId) ?: Texts.NO_CATEGORY, Modifier.testTag("form-category"),
-                    valueColor = if (d.categoryId == null) c.tertiary else c.foreground, onClick = { vm.onOpen(FormField.Category) })
-                if (f.open == FormField.Category) CategoryChoices(names, kind, d.categoryId) { id -> vm.update { it.copy(categoryId = id) }; vm.onOpen(null) }
-                Errors(problemsOf(Problem.Field.Category))
-            }
-
-            // when
-            val date = d.date ?: state.today
-            StatRow(Texts.DATE, Format.shortDate(date, state.today), Modifier.testTag("form-date"), onClick = { vm.onOpen(FormField.Date) })
-            if (f.open == FormField.Date) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                    (0L..13L).map { state.today.minusDays(it) }.forEach { day -> Token(Format.shortDate(day, state.today), { vm.onDate(day) }, active = day == date) }
-                }
-                Column(Modifier.padding(horizontal = 16.dp)) {
-                    UnderlineField(f.dateText, vm::onDateText, placeholder = "${Texts.OTHER_DATE}: ${Texts.DATE_HINT}", keyboardType = KeyboardType.Number,
-                        mono = true, onImeAction = { vm.onOpen(null) })
-                }
-            }
-            Errors(problemsOf(Problem.Field.Date))
-            val timeValue = when (val tm = d.time) {
-                is DraftTime.At -> Format.time(tm.time)
-                DraftTime.Now -> if (date == state.today) Texts.TIME_NOW else Texts.TIME_UNKNOWN
-                DraftTime.Unknown -> Texts.TIME_UNKNOWN
-            }
-            StatRow(Texts.TIME, timeValue, Modifier.testTag("form-time"), onClick = { vm.onOpen(FormField.Time) })
-            if (f.open == FormField.Time) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    UnderlineField(f.timeText, vm::onTimeText, Modifier.width(96.dp), placeholder = Texts.TIME_HINT, keyboardType = KeyboardType.Number,
-                        mono = true, onImeAction = { vm.onOpen(null) })
-                    Spacer(Modifier.weight(1f))
-                    TextAction(Texts.TIME_NOW, { vm.onTime(DraftTime.Now) })
-                    TextAction(Texts.TIME_UNKNOWN, { vm.onTime(DraftTime.Unknown) }, color = c.secondary)
-                }
-            }
-
-            // a refund's purchase
-            if (d.type == TxType.Refund) {
-                StatRow(Texts.REFUND_OF, f.refundTarget?.let { tx -> (tx.description ?: tx.payee ?: names.categoryPath(tx.categoryId) ?: "—") + " · " + Format.shortDate(tx.date, state.today) } ?: Texts.REFUND_NONE,
-                    Modifier.testTag("form-refund-of"), valueColor = if (f.refundTarget == null) c.tertiary else c.foreground, onClick = { vm.onOpen(FormField.RefundOf) })
-                if (f.open == FormField.RefundOf) {
-                    ChoiceRow(Texts.REFUND_NONE, d.refundOf == null, { vm.onRefundOf(null) })
-                    f.recentExpenses.forEach { tx ->
-                        ChoiceRow(tx.description ?: tx.payee ?: names.categoryPath(tx.categoryId) ?: Texts.typeTitle(tx.type), d.refundOf == tx.id, { vm.onRefundOf(tx) },
-                            caption = Format.shortDate(tx.date, state.today) + " · " + Format.money(tx.amountMinor, tx.currency))
-                    }
-                }
-                Errors(problemsOf(Problem.Field.RefundOf))
-            }
-
-            // words
-            Hairline(Modifier.padding(top = 8.dp))
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                UnderlineField(d.description, { v -> vm.update { it.copy(description = v) } }, Modifier.testTag("form-description"),
-                    placeholder = Texts.DESCRIPTION, imeAction = ImeAction.Next, capitalization = KeyboardCapitalization.Sentences)
-                UnderlineField(d.payee, { v -> vm.update { it.copy(payee = v) } }, Modifier.testTag("form-payee"),
-                    placeholder = Texts.PAYEE, imeAction = ImeAction.Next, capitalization = KeyboardCapitalization.Sentences)
-                UnderlineField(f.tagsText, vm::onTags, Modifier.testTag("form-tags"), placeholder = "${Texts.TAGS}: ${Texts.TAGS_HINT}", imeAction = ImeAction.Next)
-                val used = names.tags.filter { !it.archived && it.name !in d.tags }.take(12)
-                if (used.isNotEmpty()) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 6.dp)) {
-                        used.forEach { tag -> Token("#${tag.name}", { vm.onTags((f.tagsText + " " + tag.name).trim()) }, weak = true) }
-                    }
-                }
-                UnderlineField(d.note, { v -> vm.update { it.copy(note = v) } }, Modifier.testTag("form-note"), placeholder = Texts.NOTE,
-                    singleLine = false, imeAction = ImeAction.Default, capitalization = KeyboardCapitalization.Sentences)
-            }
-            Errors(problemsOf(Problem.Field.Tags) + problemsOf(Problem.Field.Note))
+            Errors(problemsOf(Problem.Field.Note))
             ReceiptsBlock(f, vm)
 
-            // a stored record: where it came from and what else can be done with it
-            f.existing?.let { tx ->
-                Hairline(Modifier.padding(top = 12.dp))
-                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-                    if (tx.type == TxType.Expense) TextAction(Texts.REPEAT, vm::onRepeat, Modifier.testTag("form-repeat"))
-                    if (tx.type == TxType.Expense) TextAction(Texts.MAKE_REFUND, vm::onMakeRefund, Modifier.testTag("form-refund"))
-                    Spacer(Modifier.weight(1f))
-                    TextAction(Texts.DELETE, vm::onDelete, Modifier.testTag("form-delete"), color = c.error)
+            val detailsOpen = showDetails || detailsHaveErrors
+            DisclosureRow(
+                Texts.OPERATION_DETAILS, Format.shortDate(d.date ?: state.today, state.today), detailsOpen,
+                onClick = { showDetails = !detailsOpen }, enabled = !detailsHaveErrors,
+                modifier = Modifier.testTag("form-details"),
+            )
+            if (detailsOpen) OperationDetails(state, vm, shown)
+
+            val tagsErrors = problemsOf(Problem.Field.Tags)
+            val tagsOpen = f.open == FormField.Tags || tagsErrors.isNotEmpty()
+            DisclosureRow(
+                Texts.TAGS, d.tags.joinToString(" ") { "#$it" }.ifBlank { "—" }, tagsOpen,
+                onClick = { vm.onOpen(FormField.Tags) }, enabled = tagsErrors.isEmpty(),
+                modifier = Modifier.testTag("form-tags-toggle"),
+            )
+            if (tagsOpen) {
+                Column(Modifier.padding(horizontal = 20.dp)) {
+                    UnderlineField(
+                        f.tagsText, vm::onTags, Modifier.fillMaxWidth().testTag("form-tags"),
+                        placeholder = Texts.TAGS_HINT, imeAction = ImeAction.Done, onImeAction = { vm.onOpen(null) },
+                    )
+                    val suggested = names.tags.filter { !it.archived && it.name !in d.tags }.take(12)
+                    if (suggested.isNotEmpty()) {
+                        FlowRow(
+                            Modifier.padding(vertical = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            suggested.forEach { tag ->
+                                Token("#${tag.name}", { vm.onTags((f.tagsText + " " + tag.name).trim()) }, weak = true)
+                            }
+                        }
+                    }
                 }
-                val origin = Texts.origin(tx.origin.code, tx.inputText)
-                Text(
-                    Texts.created(Format.moment(tx.createdAt), origin) + if (tx.updatedAt != tx.createdAt) " · " + Texts.updated(Format.moment(tx.updatedAt)) else "",
-                    style = t.caption.copy(color = c.tertiary, fontSize = 12.sp), maxLines = 3, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                )
+                Errors(tagsErrors)
+            }
+
+            f.existing?.let { tx ->
+                Row(
+                    Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    val origin = Texts.origin(tx.origin.code, tx.inputText)
+                    val updated = if (tx.updatedAt != tx.createdAt) " · " + Texts.updated(Format.moment(tx.updatedAt)) else ""
+                    Text(
+                        Texts.created(Format.moment(tx.createdAt), origin) + updated,
+                        style = t.caption, maxLines = 3, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f).padding(end = 12.dp),
+                    )
+                    TextAction(Texts.DELETE, vm::onDelete, Modifier.testTag("form-delete"), color = c.error, enabled = !f.busy && !f.photoBusy)
+                }
             }
             Spacer(Modifier.padding(bottom = 24.dp))
         }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun OperationDetails(state: OperationUiState, vm: OperationViewModel, problems: List<Problem>) {
+    val f = state.form
+    val d = f.draft
+    val names = state.names
+    val c = AppTheme.colors
+    val account = names.account(d.accountId ?: state.defaultAccountId)
+    fun problemsOf(field: Problem.Field) = problems.filter { it.field == field }
+
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(16.dp))
+            .background(lerp(c.background, c.pressed, 0.45f)),
+    ) {
+        if (d.type != TxType.Expense) StatRow(Texts.TYPES, Texts.typeTitle(d.type), enabled = false)
+        if (d.type != TxType.Transfer && d.type != TxType.Adjustment) {
+            Errors(problemsOf(Problem.Field.Account) + problemsOf(Problem.Field.AccountAmount))
+        } else {
+            StatRow(Texts.ACCOUNT, account?.name ?: "?", Modifier.testTag("form-account"), onClick = { vm.onOpen(FormField.Account) })
+            if (f.open == FormField.Account) AccountChoices(names, d.accountId ?: state.defaultAccountId) { id -> vm.update { it.copy(accountId = id) }; vm.onOpen(null) }
+            Errors(problemsOf(Problem.Field.Account))
+        }
+        if (d.type == TxType.Transfer) {
+            val to = names.account(d.toAccountId)
+            StatRow(Texts.TO_ACCOUNT, to?.name ?: "?", Modifier.testTag("form-to-account"), onClick = { vm.onOpen(FormField.ToAccount) })
+            if (f.open == FormField.ToAccount) AccountChoices(names, d.toAccountId) { id -> vm.update { it.copy(toAccountId = id) }; vm.onOpen(null) }
+            Errors(problemsOf(Problem.Field.ToAccount))
+            if (to != null && account != null && to.currency != account.currency) {
+                Column(Modifier.padding(horizontal = 16.dp)) {
+                    UnderlineField(d.toAmount, { v -> vm.update { it.copy(toAmount = v) } }, Modifier.testTag("form-to-amount"),
+                        placeholder = Texts.toAmount(to.currency), keyboardType = KeyboardType.Decimal, mono = true,
+                        error = problemsOf(Problem.Field.ToAmount).isNotEmpty())
+                }
+                Errors(problemsOf(Problem.Field.ToAmount))
+            }
+        }
+
+        // the category
+        val kind = d.type.categoryKind
+        if (kind != null) {
+            StatRow(Texts.CATEGORY, names.categoryPath(d.categoryId) ?: Texts.NO_CATEGORY, Modifier.testTag("form-category"),
+                valueColor = if (d.categoryId == null) c.tertiary else c.foreground, onClick = { vm.onOpen(FormField.Category) })
+            if (f.open == FormField.Category) CategoryChoices(names, kind, d.categoryId) { id -> vm.update { it.copy(categoryId = id) }; vm.onOpen(null) }
+            Errors(problemsOf(Problem.Field.Category))
+        }
+
+        // when
+        val date = d.date ?: state.today
+        StatRow(Texts.DATE, Format.shortDate(date, state.today), Modifier.testTag("form-date"), onClick = { vm.onOpen(FormField.Date) })
+        if (f.open == FormField.Date) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                (0L..13L).map { state.today.minusDays(it) }.forEach { day -> Token(Format.shortDate(day, state.today), { vm.onDate(day) }, active = day == date) }
+            }
+            Column(Modifier.padding(horizontal = 16.dp)) {
+                UnderlineField(f.dateText, vm::onDateText, placeholder = "${Texts.OTHER_DATE}: ${Texts.DATE_HINT}", keyboardType = KeyboardType.Number,
+                    mono = true, onImeAction = { vm.onOpen(null) })
+            }
+        }
+        Errors(problemsOf(Problem.Field.Date))
+        val timeValue = when (val tm = d.time) {
+            is DraftTime.At -> Format.time(tm.time)
+            DraftTime.Now -> if (date == state.today) Texts.TIME_NOW else Texts.TIME_UNKNOWN
+            DraftTime.Unknown -> Texts.TIME_UNKNOWN
+        }
+        StatRow(Texts.TIME, timeValue, Modifier.testTag("form-time"), onClick = { vm.onOpen(FormField.Time) })
+        if (f.open == FormField.Time) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                UnderlineField(f.timeText, vm::onTimeText, Modifier.width(96.dp), placeholder = Texts.TIME_HINT, keyboardType = KeyboardType.Number,
+                    mono = true, onImeAction = { vm.onOpen(null) })
+                Spacer(Modifier.weight(1f))
+                TextAction(Texts.TIME_NOW, { vm.onTime(DraftTime.Now) })
+                TextAction(Texts.TIME_UNKNOWN, { vm.onTime(DraftTime.Unknown) }, color = c.secondary)
+            }
+        }
+
+        // a refund's purchase
+        if (d.type == TxType.Refund) {
+            StatRow(Texts.REFUND_OF, f.refundTarget?.let { tx -> (tx.description ?: tx.payee ?: names.categoryPath(tx.categoryId) ?: "—") + " · " + Format.shortDate(tx.date, state.today) } ?: Texts.REFUND_NONE,
+                Modifier.testTag("form-refund-of"), valueColor = if (f.refundTarget == null) c.tertiary else c.foreground, onClick = { vm.onOpen(FormField.RefundOf) })
+            if (f.open == FormField.RefundOf) {
+                ChoiceRow(Texts.REFUND_NONE, d.refundOf == null, { vm.onRefundOf(null) })
+                f.recentExpenses.forEach { tx ->
+                    ChoiceRow(tx.description ?: tx.payee ?: names.categoryPath(tx.categoryId) ?: Texts.typeTitle(tx.type), d.refundOf == tx.id, { vm.onRefundOf(tx) },
+                        caption = Format.shortDate(tx.date, state.today) + " · " + Format.money(tx.amountMinor, tx.currency))
+                }
+            }
+            Errors(problemsOf(Problem.Field.RefundOf))
+        }
+
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+            UnderlineField(d.payee, { value -> vm.update { it.copy(payee = value) } }, Modifier.testTag("form-payee"),
+                placeholder = Texts.PAYEE, imeAction = ImeAction.Done, underline = false)
+        }
+    }
+}
+
+@Composable
+private fun DisclosureRow(
+    label: String,
+    value: String,
+    open: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    val t = AppTheme.type
+    Row(
+        modifier.fillMaxWidth().clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(label, style = t.secondary)
+        Text(
+            value, style = t.caption, modifier = Modifier.weight(1f), maxLines = 1,
+            overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End,
+        )
+        ChevronIcon(AppTheme.colors.secondary, up = open)
     }
 }
 

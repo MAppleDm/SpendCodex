@@ -176,10 +176,9 @@ class AiFlowTest {
         assertTrue((vm.state.value.composer.ai as AiUi.Failed).needsKey)
         assertEquals(0, server.requestCount)
         assertEquals(0, count())
-        compose.onNodeWithTag("ai-manual").assertExists()
-        val draft = vm.formStart().draft
-        assertEquals("кофе 4.50", draft.description)
-        assertEquals("", draft.amount)
+        compose.onNodeWithTag("ai-manual").assertDoesNotExist()
+        assertNull(vm.draftToEdit())
+        assertEquals("кофе 4.50", vm.state.value.composer.text)
     }
 
     @Test fun `income is rejected instead of being turned into an expense`() {

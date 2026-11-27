@@ -166,6 +166,9 @@ interface LedgerDao {
     @RawQuery
     suspend fun feedNow(query: SupportSQLiteQuery): List<FeedRow>
 
+    @Query("SELECT date, COUNT(*) AS count FROM transactions WHERE type IN (:types) GROUP BY date ORDER BY date DESC")
+    fun feedDays(types: List<String>): Flow<List<FeedDay>>
+
     @RawQuery(observedEntities = [TransactionEntity::class, TransactionTagEntity::class, AccountEntity::class, CategoryEntity::class, TagEntity::class])
     fun totals(query: SupportSQLiteQuery): Flow<List<TypeTotal>>
 

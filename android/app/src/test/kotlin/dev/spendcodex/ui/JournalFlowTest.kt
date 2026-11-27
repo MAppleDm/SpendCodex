@@ -7,6 +7,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.spendcodex.AppEnv
+import dev.spendcodex.Texts
 import dev.spendcodex.coreui.AppTheme
 import dev.spendcodex.data.domain.Draft
 import dev.spendcodex.data.domain.Filter
@@ -14,8 +15,10 @@ import dev.spendcodex.data.domain.TxType
 import dev.spendcodex.data.repo.SaveResult
 import dev.spendcodex.data.settings.Language
 import dev.spendcodex.ui.journal.JournalScreen
+import dev.spendcodex.ui.journal.JournalViewModel
 import dev.spendcodex.ui.operation.OperationScreen
 import java.io.File
+import java.time.LocalDate
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.*
@@ -55,28 +58,49 @@ class JournalFlowTest {
         }
     }
 
-    @Test fun `manual entry is beside search and does not interrupt typing`() {
-        var forms = 0
+    @Test fun `opening the date picker preserves the typed expense`() {
         var settings = 0
         val vm = env.journal()
         compose.setContent { AppTheme(darkTheme = false) {
             val s by vm.state.collectAsState()
-            JournalScreen(s, vm, vm.effects, {}, { forms++ }, {}, {}, { settings++ })
+            JournalScreen(s, vm, vm.effects, {}, {}, {}, {}, { settings++ })
         } }
         settle { vm.state.value.loaded }
         compose.onNodeWithContentDescription("кофе 4.50").performTextInput("кофе 350")
-        compose.onNodeWithTag("open-form").performClick()
-        assertEquals(1, forms)
+        compose.onNodeWithTag("open-form").assertDoesNotExist()
+        compose.onNodeWithTag("summary").performClick()
+        compose.onNodeWithTag("journal-calendar").assertExists()
+        compose.onNodeWithText("19 октября", substring = true).performClick()
+        compose.onNodeWithTag("journal-calendar").assertDoesNotExist()
+        compose.onNodeWithTag("day-2026-10-19").assertIsDisplayed()
+        compose.onNodeWithText("За этот день записей нет").assertIsDisplayed()
         assertEquals("кофе 350", vm.state.value.composer.text)
-        val form = compose.onNodeWithTag("open-form").fetchSemanticsNode().boundsInRoot
-        val search = compose.onNodeWithTag("open-search").fetchSemanticsNode().boundsInRoot
-        val input = compose.onNodeWithTag("input").fetchSemanticsNode().boundsInRoot
-        assertEquals(search.top, form.top, 0.1f)
-        assertTrue(form.bottom < input.top)
         compose.onNodeWithTag("balances").assertDoesNotExist()
         compose.onNodeWithTag("connect-ai").performClick()
         assertEquals(1, settings)
         screenshot("ai-expense-empty.png")
+    }
+
+    @Test fun `choosing an older day loads it beyond the first journal page`() {
+        val earlier = LocalDate.of(2026, 10, 18)
+        runBlocking {
+            val recent = List(JournalViewModel.PAGE + 1) {
+                Draft(amount = "10", description = "кофе")
+            }
+            env.ledger.saveAll(recent + Draft(amount = "18", date = earlier, description = "старый расход"))
+        }
+        val vm = env.journal()
+        compose.setContent { AppTheme(darkTheme = false) {
+            val s by vm.state.collectAsState()
+            JournalScreen(s, vm, vm.effects, {}, {}, {}, {}, {})
+        } }
+        settle { vm.state.value.loaded }
+        assertTrue(vm.state.value.hasMore)
+        compose.onNodeWithTag("summary").performClick()
+        compose.onNodeWithText("18 октября", substring = true).performClick()
+        settle { vm.state.value.rows.any { it.date == earlier.toString() } }
+        compose.onNodeWithTag("day-$earlier").assertIsDisplayed()
+        compose.onNodeWithText("старый расход").assertIsDisplayed()
     }
 
     @Test fun `old income remains stored but the feed and daily total contain only expenses and refunds`() {
@@ -131,7 +155,10 @@ class JournalFlowTest {
             OperationScreen(s, vm, {})
         } }
         settle { !vm.state.value.form.loading }
-        compose.runOnIdle { vm.update { it.copy(note = "из старого журнала") } }
+        compose.onNodeWithTag("form-repeat").assertDoesNotExist()
+        compose.onNodeWithTag("form-refund").assertDoesNotExist()
+        compose.onNode(hasSetTextAction() and hasContentDescription(Texts.COMMENT_HINT))
+            .performTextInput("из старого журнала")
         compose.onNodeWithTag("form-save").performClick()
         settle { runBlocking { env.ledger.get(tx.id)?.note == "из старого журнала" } }
         assertEquals(tx.copy(note = "из старого журнала"), runBlocking { env.ledger.get(tx.id) })

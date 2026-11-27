@@ -97,6 +97,43 @@ fun CameraIcon(color: Color, modifier: Modifier = Modifier) = Canvas(modifier.si
 }
 
 @Composable
+fun EditIcon(color: Color, modifier: Modifier = Modifier) = Canvas(modifier.size(24.dp)) {
+    val w = size.width
+    val frame = Path().apply {
+        moveTo(w * 0.48f, w * 0.22f)
+        lineTo(w * 0.22f, w * 0.22f)
+        lineTo(w * 0.22f, w * 0.78f)
+        lineTo(w * 0.78f, w * 0.78f)
+        lineTo(w * 0.78f, w * 0.52f)
+    }
+    drawPath(frame, color, style = stroke())
+    val pencil = Path().apply {
+        moveTo(w * 0.42f, w * 0.59f)
+        lineTo(w * 0.46f, w * 0.43f)
+        lineTo(w * 0.75f, w * 0.14f)
+        lineTo(w * 0.86f, w * 0.25f)
+        lineTo(w * 0.57f, w * 0.54f)
+        close()
+    }
+    drawPath(pencil, color, style = stroke())
+}
+
+@Composable
+fun GalleryIcon(color: Color, modifier: Modifier = Modifier) = Canvas(modifier.size(24.dp)) {
+    val w = size.width
+    drawRoundRect(color, Offset(w * 0.16f, w * 0.19f), Size(w * 0.68f, w * 0.62f), CornerRadius(w * 0.08f), style = stroke())
+    drawCircle(color, w * 0.05f, Offset(w * 0.35f, w * 0.38f), style = stroke())
+    val hills = Path().apply {
+        moveTo(w * 0.18f, w * 0.7f)
+        lineTo(w * 0.35f, w * 0.54f)
+        lineTo(w * 0.45f, w * 0.62f)
+        lineTo(w * 0.63f, w * 0.45f)
+        lineTo(w * 0.83f, w * 0.64f)
+    }
+    drawPath(hills, color, style = stroke())
+}
+
+@Composable
 fun BackIcon(color: Color, modifier: Modifier = Modifier) = Canvas(modifier.size(24.dp)) {
     val w = size.width
     val chevron = Path().apply {

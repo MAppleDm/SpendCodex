@@ -13,6 +13,7 @@ import dev.spendcodex.data.ai.AiDraft
 import dev.spendcodex.data.ai.AiFailure
 import dev.spendcodex.data.ai.AiIssue
 import dev.spendcodex.data.ai.AiReader
+import dev.spendcodex.data.db.FeedDay
 import dev.spendcodex.data.db.FeedRow
 import dev.spendcodex.data.db.TypeTotal
 import dev.spendcodex.data.domain.Currencies
@@ -50,6 +51,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
@@ -88,13 +90,14 @@ data class ComposerState(
     val photos: List<ReceiptPhoto> = emptyList(),
 )
 
-/** What the manual form starts from: the line, DeepSeek's single answer or the photos being read, attached. */
+/** What the form starts from when correcting a single DeepSeek draft. */
 data class FormStart(val draft: Draft, val photos: List<ReceiptPhoto>, val fromLine: Boolean)
 
 data class JournalUiState(
     val loaded: Boolean = false,
     val today: LocalDate = LocalDate.now(),
     val rows: List<FeedRow> = emptyList(),
+    val days: List<FeedDay> = emptyList(),
     val hasMore: Boolean = false,
     val names: Names = Names(emptyList(), emptyList(), emptyList()),
     val todayTotals: List<TypeTotal> = emptyList(),
@@ -130,13 +133,13 @@ class JournalViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, Names(emptyList(), emptyList(), emptyList()))
     private val rows = limit.flatMapLatest { ledger.feed(Filter(types = EXPENSE_TYPES), it) }
     private val totals = today.flatMapLatest { ledger.totals(Filter(from = it, to = it, types = EXPENSE_TYPES)) }
-    private data class Data(val rows: List<FeedRow>, val names: Names, val totals: List<TypeTotal>, val today: LocalDate)
-    private val data = combine(rows, names, totals, today) { r, n, t, d -> Data(r, n, t, d) }
+    private data class Data(val rows: List<FeedRow>, val days: List<FeedDay>, val names: Names, val totals: List<TypeTotal>, val today: LocalDate)
+    private val data = combine(rows, ledger.feedDays(EXPENSE_TYPES), names, totals, today, ::Data)
 
     val state: StateFlow<JournalUiState> = combine(data, composer, settings.choices, secrets.hasKey, notices.current) { d, c, choices, key, notice ->
         val default = choices.defaultAccountId?.takeIf { id -> d.names.active.any { it.id == id } } ?: d.names.active.firstOrNull()?.id
         JournalUiState(
-            loaded = true, today = d.today, rows = d.rows, hasMore = d.rows.size >= limit.value,
+            loaded = true, today = d.today, rows = d.rows, days = d.days, hasMore = d.rows.size < d.days.sumOf { it.count },
             names = d.names, todayTotals = d.totals, defaultAccountId = default, hasKey = key,
             composer = c, canSend = !c.busy && c.text.isNotBlank() && c.ai !is AiUi.Result, notice = notice,
         )
@@ -153,16 +156,15 @@ class JournalViewModel @Inject constructor(
 
     fun onSharedText(text: String) = onText(text.trim())
 
-    /** No local interpretation: preserve the note, or start from a blocked AI draft; photos being read go along. */
-    fun formStart(): FormStart {
+    fun draftToEdit(): FormStart? {
         val c = composer.value
-        val item = (c.ai as? AiUi.Result)?.items?.singleOrNull()
+        if (c.busy || c.saving) return null
+        val item = (c.ai as? AiUi.Result)?.items?.singleOrNull() ?: return null
         onAiClose()
         val id = UUID.randomUUID().toString()
         val line = if (c.fromPhotos) null else c.text.trim().ifEmpty { null }
-        val draft = (item?.draft ?: Draft(description = line.orEmpty(), currency = settings.choices.value.defaultCurrency))
-            .copy(id = id, type = TxType.Expense, origin = Origin.Form, inputText = line)
-        val photos = (item?.photos ?: c.photos).take(ReceiptLimits.PER_OPERATION).map { it.copyFor(id) }
+        val draft = item.draft.copy(id = id, type = TxType.Expense, origin = Origin.Ai, inputText = line)
+        val photos = item.photos.take(ReceiptLimits.PER_OPERATION).map { it.copyFor(id) }
         return FormStart(draft, photos, fromLine = line != null)
     }
 
@@ -375,7 +377,7 @@ class JournalViewModel @Inject constructor(
         }
     }
 
-    /** A record or the manual form was just recorded: the journal goes to the newest rows. */
+    /** A record was saved: the journal goes to the newest rows. */
     fun onRecorded() { _effects.trySend(JournalEffect.Recorded) }
 
     /** A swipe deleted a record; the line above the input brings it back, with its tags, receipts and refunds' links. */
@@ -400,7 +402,18 @@ class JournalViewModel @Inject constructor(
         })
     }
 
-    fun onNeedMore() { if (state.value.hasMore) limit.update { it + PAGE } }
+    fun onNeedMore() {
+        val current = state.value
+        if (current.hasMore) limit.update { maxOf(it, current.rows.size + PAGE) }
+    }
+
+    suspend fun loadThrough(date: LocalDate) {
+        val target = date.toString()
+        val current = state.first { it.loaded }
+        val through = current.days.takeWhile { it.date >= target }.sumOf { it.count }
+        limit.update { maxOf(it, through + PAGE) }
+        state.first { page -> page.rows.size >= minOf(through, page.days.sumOf { it.count }) }
+    }
     fun onNotice(notice: Notice) {
         notices.dismiss(notice.id)
         val undo = notice.undo ?: return
