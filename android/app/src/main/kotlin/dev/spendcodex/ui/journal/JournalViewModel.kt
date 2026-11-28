@@ -45,15 +45,13 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -99,6 +97,7 @@ data class JournalUiState(
     val rows: List<FeedRow> = emptyList(),
     val days: List<FeedDay> = emptyList(),
     val hasMore: Boolean = false,
+    val scrollRequest: Int = 0,
     val names: Names = Names(emptyList(), emptyList(), emptyList()),
     val todayTotals: List<TypeTotal> = emptyList(),
     val defaultAccountId: String? = null,
@@ -107,8 +106,6 @@ data class JournalUiState(
     val canSend: Boolean = false,
     val notice: Notice? = null,
 )
-
-sealed interface JournalEffect { data object Recorded : JournalEffect }
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -121,25 +118,29 @@ class JournalViewModel @Inject constructor(
     private val clock: Clock,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
-    private val limit = MutableStateFlow(PAGE)
+    private data class FeedRequest(val limit: Int = PAGE, val scrollRequest: Int = 0)
+    private data class FeedPage(val rows: List<FeedRow>, val scrollRequest: Int)
+
+    private val feedRequest = MutableStateFlow(FeedRequest())
     private val today = MutableStateFlow(LocalDate.now(clock))
     private val composer = MutableStateFlow(ComposerState())
-    private val _effects = Channel<JournalEffect>(Channel.BUFFERED)
-    val effects: Flow<JournalEffect> = _effects.receiveAsFlow()
     private var request: Job? = null
     private val camera = CameraCapture(context)
 
     private val names = combine(ledger.accounts, ledger.categories, ledger.tags) { a, c, t -> Names(a, c, t) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, Names(emptyList(), emptyList(), emptyList()))
-    private val rows = limit.flatMapLatest { ledger.feed(Filter(types = EXPENSE_TYPES), it) }
+    private val feed = feedRequest.flatMapLatest { requested ->
+        ledger.feed(Filter(types = EXPENSE_TYPES), requested.limit).map { FeedPage(it, requested.scrollRequest) }
+    }
     private val totals = today.flatMapLatest { ledger.totals(Filter(from = it, to = it, types = EXPENSE_TYPES)) }
-    private data class Data(val rows: List<FeedRow>, val days: List<FeedDay>, val names: Names, val totals: List<TypeTotal>, val today: LocalDate)
-    private val data = combine(rows, ledger.feedDays(EXPENSE_TYPES), names, totals, today, ::Data)
+    private data class Data(val feed: FeedPage, val days: List<FeedDay>, val names: Names, val totals: List<TypeTotal>, val today: LocalDate)
+    private val data = combine(feed, ledger.feedDays(EXPENSE_TYPES), names, totals, today, ::Data)
 
     val state: StateFlow<JournalUiState> = combine(data, composer, settings.choices, secrets.hasKey, notices.current) { d, c, choices, key, notice ->
         val default = choices.defaultAccountId?.takeIf { id -> d.names.active.any { it.id == id } } ?: d.names.active.firstOrNull()?.id
         JournalUiState(
-            loaded = true, today = d.today, rows = d.rows, days = d.days, hasMore = d.rows.size < d.days.sumOf { it.count },
+            loaded = true, today = d.today, rows = d.feed.rows, days = d.days, hasMore = d.feed.rows.size < d.days.sumOf { it.count },
+            scrollRequest = d.feed.scrollRequest,
             names = d.names, todayTotals = d.totals, defaultAccountId = default, hasKey = key,
             composer = c, canSend = !c.busy && c.text.isNotBlank() && c.ai !is AiUi.Result, notice = notice,
         )
@@ -343,7 +344,7 @@ class JournalViewModel @Inject constructor(
         // after photos the line is kept: it was not part of what was recorded
         composer.update { if (it.batchId != batchId) it else if (it.fromPhotos) ComposerState(text = it.text) else ComposerState() }
         // the new rows are the confirmation; a mistaken one is swiped away
-        if (results.any { it is SaveResult.Saved && it.created }) _effects.trySend(JournalEffect.Recorded)
+        if (results.any { it is SaveResult.Saved && it.created }) onRecorded()
     }
 
     fun onAiRetry() {
@@ -377,8 +378,8 @@ class JournalViewModel @Inject constructor(
         }
     }
 
-    /** A record was saved: the journal goes to the newest rows. */
-    fun onRecorded() { _effects.trySend(JournalEffect.Recorded) }
+    /** Deliver the scroll request with rows read after the save. A backdated entry may fall outside the loaded page. */
+    fun onRecorded() { feedRequest.update { it.copy(scrollRequest = it.scrollRequest + 1) } }
 
     /** A swipe deleted a record; the line above the input brings it back, with its tags, receipts and refunds' links. */
     fun onDelete(id: String) {
@@ -404,16 +405,21 @@ class JournalViewModel @Inject constructor(
 
     fun onNeedMore() {
         val current = state.value
-        if (current.hasMore) limit.update { maxOf(it, current.rows.size + PAGE) }
+        if (current.hasMore) loadAtLeast(current.rows.size + PAGE)
     }
 
     suspend fun loadThrough(date: LocalDate) {
         val target = date.toString()
         val current = state.first { it.loaded }
         val through = current.days.takeWhile { it.date >= target }.sumOf { it.count }
-        limit.update { maxOf(it, through + PAGE) }
+        loadAtLeast(through + PAGE)
         state.first { page -> page.rows.size >= minOf(through, page.days.sumOf { it.count }) }
     }
+
+    private fun loadAtLeast(limit: Int) {
+        feedRequest.update { if (limit > it.limit) it.copy(limit = limit) else it }
+    }
+
     fun onNotice(notice: Notice) {
         notices.dismiss(notice.id)
         val undo = notice.undo ?: return

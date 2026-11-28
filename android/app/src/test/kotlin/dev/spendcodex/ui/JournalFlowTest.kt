@@ -10,15 +10,23 @@ import dev.spendcodex.AppEnv
 import dev.spendcodex.Texts
 import dev.spendcodex.coreui.AppTheme
 import dev.spendcodex.data.domain.Draft
+import dev.spendcodex.data.domain.DraftTime
 import dev.spendcodex.data.domain.Filter
 import dev.spendcodex.data.domain.TxType
 import dev.spendcodex.data.repo.SaveResult
 import dev.spendcodex.data.settings.Language
+import dev.spendcodex.ui.data.DataViewModel
 import dev.spendcodex.ui.journal.JournalScreen
 import dev.spendcodex.ui.journal.JournalViewModel
+import dev.spendcodex.ui.lock.AppLock
+import dev.spendcodex.ui.lock.LockViewModel
 import dev.spendcodex.ui.operation.OperationScreen
+import dev.spendcodex.ui.settings.SettingsViewModel
+import dev.spendcodex.ui.update.GitHubUpdates
+import dev.spendcodex.ui.update.UpdateViewModel
 import java.io.File
 import java.time.LocalDate
+import java.time.LocalTime
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.*
@@ -63,7 +71,7 @@ class JournalFlowTest {
         val vm = env.journal()
         compose.setContent { AppTheme(darkTheme = false) {
             val s by vm.state.collectAsState()
-            JournalScreen(s, vm, vm.effects, {}, {}, {}, {}, { settings++ })
+            JournalScreen(s, vm, {}, {}, {}, {}, { settings++ })
         } }
         settle { vm.state.value.loaded }
         compose.onNodeWithContentDescription("кофе 4.50").performTextInput("кофе 350")
@@ -92,7 +100,7 @@ class JournalFlowTest {
         val vm = env.journal()
         compose.setContent { AppTheme(darkTheme = false) {
             val s by vm.state.collectAsState()
-            JournalScreen(s, vm, vm.effects, {}, {}, {}, {}, {})
+            JournalScreen(s, vm, {}, {}, {}, {}, {})
         } }
         settle { vm.state.value.loaded }
         assertTrue(vm.state.value.hasMore)
@@ -101,6 +109,34 @@ class JournalFlowTest {
         settle { vm.state.value.rows.any { it.date == earlier.toString() } }
         compose.onNodeWithTag("day-$earlier").assertIsDisplayed()
         compose.onNodeWithText("старый расход").assertIsDisplayed()
+    }
+
+    @Test fun `returning from a record restores the same position in the journal`() {
+        runBlocking {
+            env.ledger.saveAll(List(40) { index ->
+                Draft(amount = "10", time = DraftTime.At(LocalTime.of(8, index)), description = "Расход ${index + 1}")
+            })
+        }
+        env.settings.setSetupDone(true)
+        val nav = NavViewModel()
+        val journal = env.journal()
+        val operation = env.operation()
+        val screens = Screens(
+            nav, journal, operation, env.search(),
+            DataViewModel(env.context, env.backups, env.ledger, env.settings, env.notices, env.clock),
+            SettingsViewModel(env.settings, env.secrets, env.ledger, env.docs, env.context),
+            LockViewModel(AppLock(env.context)), UpdateViewModel(GitHubUpdates(env.context)),
+        )
+        compose.setContent { AppTheme(darkTheme = false) { AppRoot(screens) } }
+        settle { journal.state.value.rows.size == 40 }
+        val oldestVisible = compose.onNodeWithText("Расход 20")
+        compose.onNodeWithTag("feed").performScrollToIndex(20)
+        val before = oldestVisible.assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        oldestVisible.performClick()
+        settle { !operation.state.value.form.loading }
+        compose.onNodeWithTag("form-save").assertIsDisplayed()
+        compose.runOnIdle { assertTrue(nav.back()) }
+        assertEquals(before, oldestVisible.assertIsDisplayed().fetchSemanticsNode().boundsInRoot)
     }
 
     @Test fun `old income remains stored but the feed and daily total contain only expenses and refunds`() {
@@ -112,7 +148,7 @@ class JournalFlowTest {
         val vm = env.journal()
         compose.setContent { AppTheme(darkTheme = false) {
             val s by vm.state.collectAsState()
-            JournalScreen(s, vm, vm.effects, {}, {}, {}, {}, {})
+            JournalScreen(s, vm, {}, {}, {}, {}, {})
         } }
         settle { vm.state.value.rows.size == 2 && vm.state.value.todayTotals.size == 2 }
         compose.onNodeWithText("старая зарплата").assertDoesNotExist()

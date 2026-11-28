@@ -63,7 +63,7 @@ class PhotoFlowTest {
         vm = env.journal()
         compose.setContent { AppTheme(darkTheme = false) {
             val s by vm.state.collectAsState()
-            JournalScreen(s, vm, vm.effects, {}, {}, {}, {}, {})
+            JournalScreen(s, vm, {}, {}, {}, {}, {})
         } }
         settle { vm.state.value.loaded }
     }

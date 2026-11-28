@@ -1,6 +1,8 @@
 package dev.spendcodex
 
 import android.content.Context
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.test.core.app.ApplicationProvider
 import dev.spendcodex.data.ai.AiReader
 import dev.spendcodex.data.backup.Backups
@@ -19,6 +21,7 @@ import java.io.File
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
+import kotlinx.coroutines.cancel
 import okhttp3.OkHttpClient
 
 /** No Keystore under Robolectric: a reversible stand-in, enough for the screens. */
@@ -45,10 +48,14 @@ class AppEnv(language: Language = Language.Ru, modelUrl: String = "http://127.0.
     val docs = DocAssets { File("../../docs/export/$it").inputStream() }
     val backups = Backups(context, db, ledger, settings, clock, docs, "0.1.0")
     val ai = AiReader(OkHttpClient(), modelUrl, key = { secrets.deepseekKey })
+    private val viewModels = mutableListOf<ViewModel>()
 
-    fun journal() = JournalViewModel(ledger, settings, secrets, ai, notices, clock, context)
-    fun operation() = OperationViewModel(ledger, settings, notices, clock, context)
-    fun search() = SearchViewModel(ledger, clock)
+    fun journal() = JournalViewModel(ledger, settings, secrets, ai, notices, clock, context).also { viewModels += it }
+    fun operation() = OperationViewModel(ledger, settings, notices, clock, context).also { viewModels += it }
+    fun search() = SearchViewModel(ledger, clock).also { viewModels += it }
 
-    fun close() = db.close()
+    fun close() {
+        viewModels.forEach { it.viewModelScope.cancel() }
+        db.close()
+    }
 }

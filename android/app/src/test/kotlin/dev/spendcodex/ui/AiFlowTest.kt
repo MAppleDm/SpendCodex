@@ -9,12 +9,14 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.spendcodex.AppEnv
 import dev.spendcodex.Texts
 import dev.spendcodex.coreui.AppTheme
+import dev.spendcodex.data.domain.Draft
 import dev.spendcodex.data.domain.Filter
 import dev.spendcodex.data.domain.Origin
 import dev.spendcodex.data.settings.Language
 import dev.spendcodex.ui.journal.AiUi
 import dev.spendcodex.ui.journal.JournalScreen
 import dev.spendcodex.ui.journal.JournalViewModel
+import java.time.LocalDate
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -59,9 +61,25 @@ class AiFlowTest {
         vm = env.journal()
         compose.setContent { AppTheme(darkTheme = false) {
             val s by vm.state.collectAsState()
-            JournalScreen(s, vm, vm.effects, {}, {}, {}, {}, {})
+            JournalScreen(s, vm, {}, {}, {}, {}, {})
         } }
         settle { vm.state.value.loaded && vm.state.value.names.active.size == 1 }
+    }
+
+    @Test fun `saving a new expense reveals it at the bottom while reading older records`() {
+        server.enqueue(answer(coffee))
+        show()
+        runBlocking {
+            env.ledger.saveAll(List(40) { index ->
+                Draft(amount = "10", date = LocalDate.now(env.clock).minusDays(1), description = "Старый расход ${index + 1}")
+            })
+        }
+        settle { vm.state.value.rows.size == 40 }
+        compose.onNodeWithTag("feed").performScrollToIndex(25)
+        type("кофе 4.50")
+        send()
+        settle { vm.state.value.rows.firstOrNull()?.description == "кофе" && vm.state.value.scrollRequest != 0 }
+        compose.onNodeWithText("кофе").assertIsDisplayed()
     }
 
     private fun answer(ops: String, status: String = "ok"): MockResponse {

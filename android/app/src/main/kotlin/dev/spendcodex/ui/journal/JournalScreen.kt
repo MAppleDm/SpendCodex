@@ -33,10 +33,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -73,7 +75,6 @@ import dev.spendcodex.data.receipts.ReceiptPhoto
 import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -85,7 +86,6 @@ import kotlinx.coroutines.withContext
 fun JournalScreen(
     state: JournalUiState,
     vm: JournalViewModel,
-    effects: Flow<JournalEffect>,
     onOpen: (String) -> Unit,
     onEditDraft: () -> Unit,
     onSearch: () -> Unit,
@@ -99,7 +99,8 @@ fun JournalScreen(
     var choosing by remember { mutableStateOf(false) }
     var calendarAnchor by remember { mutableStateOf<LocalDate?>(null) }
     var jumpDate by remember { mutableStateOf<LocalDate?>(null) }
-    var selectedDate by remember { mutableStateOf<LocalDate?>(null) }
+    var selectedDate by rememberSaveable { mutableStateOf<LocalDate?>(null) }
+    var handledScrollRequest by rememberSaveable { mutableIntStateOf(0) }
     val feedItems = remember(state.rows, selectedDate) { feedItems(state.rows, selectedDate = selectedDate) }
     val latestItems by rememberUpdatedState(feedItems)
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(AiReader.MAX_PHOTOS)) { vm.onPhotos(it) }
@@ -135,13 +136,15 @@ fun JournalScreen(
         }
         jumpDate = null
     }
-    LaunchedEffect(effects) {
-        effects.collect {
-            haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-            jumpDate = null
-            selectedDate = null
-            listState.animateScrollToItem(0)
-        }
+    LaunchedEffect(state.loaded, state.scrollRequest) {
+        if (!state.loaded || handledScrollRequest == state.scrollRequest) return@LaunchedEffect
+        handledScrollRequest = state.scrollRequest
+        if (state.scrollRequest == 0) return@LaunchedEffect
+        haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+        jumpDate = null
+        selectedDate = null
+        // Ask for the absolute bottom after the refreshed items reach the list, overriding its saved item anchor.
+        listState.requestScrollToItem(0)
     }
     Column(modifier.fillMaxSize().background(AppTheme.colors.background).statusBarsPadding().imePadding()) {
         Header(state, { openCalendar(state.today) }, onSearch, onSettings)

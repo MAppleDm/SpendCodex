@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -83,6 +84,7 @@ private fun Pages(s: Screens) {
     val stack by s.nav.stack.collectAsStateWithLifecycle()
     val top = stack.last()
     val journal by s.journal.state.collectAsStateWithLifecycle()
+    val journalState = rememberSaveableStateHolder()
 
     // pages that finish by themselves go back to where they were opened from
     LaunchedEffect(Unit) {
@@ -119,16 +121,17 @@ private fun Pages(s: Screens) {
 
     Box(Modifier.fillMaxSize().then(shortcuts)) {
         when (top) {
-            Screen.Journal -> JournalScreen(
-                state = journal,
-                vm = s.journal,
-                effects = s.journal.effects,
-                onOpen = { id -> s.nav.push(Screen.Operation(OperationRequest.Edit(id))) },
-                onEditDraft = ::editDraft,
-                onSearch = { s.nav.push(Screen.Search()) },
-                onSettings = { s.nav.push(Screen.Settings) },
-                onAi = { s.nav.push(Screen.Ai) },
-            )
+            Screen.Journal -> journalState.SaveableStateProvider(Screen.Journal.key) {
+                JournalScreen(
+                    state = journal,
+                    vm = s.journal,
+                    onOpen = { id -> s.nav.push(Screen.Operation(OperationRequest.Edit(id))) },
+                    onEditDraft = ::editDraft,
+                    onSearch = { s.nav.push(Screen.Search()) },
+                    onSettings = { s.nav.push(Screen.Settings) },
+                    onAi = { s.nav.push(Screen.Ai) },
+                )
+            }
             is Screen.Operation -> {
                 LaunchedEffect(top.key) { s.operation.open(top.key, top.request, top.fromLine) }
                 val state by s.operation.state.collectAsStateWithLifecycle()

@@ -25,8 +25,8 @@ android {
         applicationId = "dev.spendcodex"
         minSdk = 26
         targetSdk = 37
-        versionCode = 10
-        versionName = "0.4.2"
+        versionCode = 11
+        versionName = "0.4.3"
 
         buildConfigField("String", "MODEL_BASE_URL", "\"$modelBaseUrl\"")
         manifestPlaceholders["usesCleartext"] = modelBaseUrl.startsWith("http://").toString()
